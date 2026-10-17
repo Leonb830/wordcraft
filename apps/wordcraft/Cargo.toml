@@ -78,3 +78,6 @@ pollster = "0.4"
 arboard = { workspace = true, features = ["image-data"] }
 # The control server's random key.
 getrandom = "0.3"
+
+[dev-dependencies]
+wordcraft-mcp = { workspace = true }

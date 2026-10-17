@@ -24,10 +24,10 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
   - [x] Keep native process code out of WASM.
   - **Checkpoint:** protocol tests pass using a fake app-server; no orphan process on shutdown.
 
-- [ ] **T3 — Define narrow WordCraft document tools** (4–6 h; depends on T0, T2)
-  - [ ] Add active-document read tools and selection context.
-  - [ ] Enforce a server-side allowlist; exclude general files, shell, UI controls, screenshots, save/export.
-  - [ ] Keep the existing MCP profile and behavior unchanged.
+- [x] **T3 — Define narrow WordCraft document tools** (4–6 h; depends on T0, T2)
+  - [x] Add active-document read tools and selection context.
+  - [x] Enforce a server-side allowlist; exclude general files, shell, UI controls, screenshots, save/export.
+  - [x] Keep the existing MCP profile and behavior unchanged.
   - **Checkpoint:** allowlist tests pass and excluded tool classes are denied.
 
 - [ ] **T4 — Add approval and request-scoped edit review** (6–10 h; depends on T0, T3)
@@ -130,3 +130,13 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 - `cargo check -p wordcraft-assistant --target wasm32-unknown-unknown --lib`: exit 0.
 - `cargo xtask layers`: exit 0; 21 crates, no violations.
 - Repository CI remains separately recorded; focused success does not imply workspace CI success.
+
+### T3 — complete (2026-10-17)
+
+- Added a separate `CodexProfile` with five read tools, explicit host-only consent, captured selection/document scope, document identity/revision checks, revocation and context/query limits. Broad MCP dispatch and resource reads are never called. No write schemas exist yet.
+- `cargo test -p wordcraft-mcp`: exit 0; 16 unit tests and 5 integration tests passed, including all existing MCP/automation-root tests and 5 new scope/contract tests.
+- `cargo run -p wordcraft --example codex_profile_smoke`: exit 0; actual native WordApp rendered three frames, then verified all five reads, private text exclusion, rejection of every engine registry command, and stale-revision rejection against its live Session. Synthetic data only, no user files/preferences. The test exits its own process to avoid the known macOS window-drop issue.
+- `cargo clippy -p wordcraft-mcp --all-targets --no-deps -- -D warnings`: exit 0.
+- `cargo fmt --all --check`: exit 0.
+- `cargo xtask ci`: exit 1; formatting passes, unchanged baseline `crates/proof/src/affix.rs:288` Clippy error remains; later CI stages skipped.
+- Excluded file/shell/UI/screenshot/save/export tool classes and resource routes denied in tests; original MCP default surface unchanged. Native test uses the separate in-process profile; runtime service wiring belongs to T5.
