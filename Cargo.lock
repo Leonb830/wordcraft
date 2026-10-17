@@ -5162,6 +5162,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "wordcraft-assistant"
+version = "0.7.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "wordcraft-cli"
 version = "0.7.0"
 dependencies = [

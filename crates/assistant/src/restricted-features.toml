@@ -1,0 +1,27 @@
+[features]
+shell_tool = false
+unified_exec = false
+shell_snapshot = false
+apps = false
+plugins = false
+computer_use = false
+browser_use = false
+browser_use_external = false
+in_app_browser = false
+image_generation = false
+view_image = false
+multi_agent = false
+multi_agent_v2 = false
+memories = false
+hooks = false
+skill_search = false
+skill_mcp_dependency_install = false
+code_mode = false
+code_mode_host = false
+workspace_dependencies = false
+worktrees = false
+goals = false
+sleep_tool = false
+enable_request_compression = false
+[tools]
+view_image = false

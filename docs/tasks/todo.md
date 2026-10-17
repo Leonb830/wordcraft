@@ -18,10 +18,10 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 
 ## Product implementation
 
-- [ ] **T2 — Add Codex client and process lifecycle** (6–10 h; depends on T1)
-  - [ ] Implement typed stdio JSONL client and bounded event/request handling.
-  - [ ] Add startup, cancellation, error, shutdown, and child cleanup behavior.
-  - [ ] Keep native process code out of WASM.
+- [x] **T2 — Add Codex client and process lifecycle** (6–10 h; depends on T1)
+  - [x] Implement typed stdio JSONL client and bounded event/request handling.
+  - [x] Add startup, cancellation, error, shutdown, and child cleanup behavior.
+  - [x] Keep native process code out of WASM.
   - **Checkpoint:** protocol tests pass using a fake app-server; no orphan process on shutdown.
 
 - [ ] **T3 — Define narrow WordCraft document tools** (4–6 h; depends on T0, T2)
@@ -119,3 +119,14 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 
 - Installed Rust 1.95.0, rustfmt, clippy and wasm32-unknown-unknown under this task's `work/toolchain`; shell profile and global Codex configuration unchanged.
 - `cargo xtask ci`: exit 1 on unchanged product source. fmt passed; clippy stopped at existing `crates/proof/src/affix.rs:288` (`clippy::collapsible_match`). Tests/assets/layers/wasm were skipped by xtask after that failure. This is not a passing CI result. Revisit the baseline warning before final release verification.
+
+### T2 — complete (2026-10-17)
+
+- Added L5 `wordcraft-assistant`, fixed request enum, bounded JSONL transport/queues, exact runtime version check, timeouts, error redaction and native-only process worker. UI remains free of process I/O.
+- Dedicated WordCraft profile refuses the global Codex home and symlinked config, disables broad tool features, clears inherited credential environment variables, and never logs stderr/protocol payloads.
+- `cargo test -p wordcraft-assistant --features test-support`: exit 0; 2 unit + 6 process integration tests pass. Initial test startup timeout was increased from 500 ms to 3 s for cold copied macOS executable startup; blocked-write shutdown still has a 2 s assertion.
+- Fixtures cover partial output, malformed/truncated/oversized messages, unknown binary, unsupported version, handshake/request timeout, child exit, duplicate response, thread start/resume, streamed text, interrupt, non-reflection of sensitive error text, and shutdown while child stdin is blocked. `/bin/kill -0` confirms exited test children are reaped.
+- `cargo clippy -p wordcraft-assistant --all-targets --features test-support -- -D warnings`: exit 0 after corrections.
+- `cargo check -p wordcraft-assistant --target wasm32-unknown-unknown --lib`: exit 0.
+- `cargo xtask layers`: exit 0; 21 crates, no violations.
+- Repository CI remains separately recorded; focused success does not imply workspace CI success.

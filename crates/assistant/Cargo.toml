@@ -1,0 +1,25 @@
+[package]
+name = "wordcraft-assistant"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Typed Codex app-server protocol and native process lifecycle"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+test-support = []
+
+[[bin]]
+name = "wordcraft-codex-fixture"
+path = "tests/fixtures/server.rs"
+required-features = ["test-support"]
+
+[dev-dependencies]
+tempfile = "3"
