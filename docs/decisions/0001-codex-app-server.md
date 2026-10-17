@@ -103,3 +103,20 @@ https://learn.chatgpt.com/docs/app-server
 | 2026-10-16 | T0: reconciled main and both unmerged PRs; selected additive native app-server architecture and installed-runtime/auth defaults. |
 
 T1 qualification: see [compatibility matrix](../tasks/codex-spike/README.md). The supported version is exactly 0.162.1 until another version is qualified. Managed browser auth start/cancel and isolated sign-out work. Hosted inference with the dedicated profile remains a product integration check.
+
+## T5 native document relay (2026-10-17)
+
+The dedicated MCP helper runs as `wordcraft --codex-document-bridge`, before GUI,
+logging or preference initialization. Its five allowlisted read tools relay requests
+through standard MCP form elicitation and the stable app-server
+`mcpServer/elicitation/request` route. The owning native host checks the thread and
+current shared document identity/revision before replying. Tool arguments travel in
+`_meta.wordcraftCall`; the result is a schema-defined string in the elicitation
+response. This round trip was qualified against installed Codex 0.162.1.
+
+This keeps active document data in private stdio pipes: there is no listening
+socket, control-key reuse, context file, global MCP registration or broad Backend.
+Unknown servers and tools are declined. The ordinary control server and CLI MCP
+remain independently available to external agents. The helper is a separate
+process so the assistant runtime never gains access to the editor's unrestricted
+command dispatcher. Write proposals will be added only through the T4 gate in T7.

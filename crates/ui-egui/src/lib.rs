@@ -1283,6 +1283,47 @@ impl WordApp {
     fn ui_command(&mut self, id: &str, p: &Value) -> Option<Result<Value, String>> {
         let s = |k: &str| p.get(k).and_then(Value::as_str);
         Some(Ok(match id {
+            "ui.assistantShareSelection" | "ui.assistantShareDocument" | "ui.assistantRevoke" => {
+                if cfg!(target_arch = "wasm32") {
+                    return Some(Err("Codex requires the desktop app.".into()));
+                }
+                if self.assistant.actions.len() >= 32 {
+                    return Some(Err("Too many pending assistant actions.".into()));
+                }
+                self.assistant.actions.push_back(match id {
+                    "ui.assistantShareSelection" => assistant::Action::ShareSelection,
+                    "ui.assistantShareDocument" => assistant::Action::ShareDocument,
+                    _ => assistant::Action::Revoke,
+                });
+                json!({"queued":true})
+            }
+            "ui.assistantStatus" => json!({"enabled":self.assistant.enabled,"status":self.assistant.status,"signedIn":self.assistant.signed_in}),
+            "ui.assistantConnection" => {
+                self.assistant.connection_open = true;
+                json!({"open":true})
+            }
+            "ui.assistantConnect" | "ui.assistantDisconnect" | "ui.assistantAccount" => {
+                if cfg!(target_arch = "wasm32") {
+                    return Some(Err("Codex requires the desktop app.".into()));
+                }
+                if self.assistant.actions.len() >= 32 {
+                    return Some(Err("Too many pending assistant actions.".into()));
+                }
+                if id == "ui.assistantConnect"
+                    && let Some(binary) = s("binary")
+                {
+                    if binary.len() > 4096 {
+                        return Some(Err("The executable path is too long.".into()));
+                    }
+                    self.assistant.binary = binary.to_owned();
+                }
+                self.assistant.actions.push_back(match id {
+                    "ui.assistantConnect" => assistant::Action::Connect,
+                    "ui.assistantDisconnect" => assistant::Action::Disconnect,
+                    _ => assistant::Action::Account,
+                });
+                json!({"queued":true})
+            }
             "ui.assistantReview" => {
                 self.assistant.review_open = p.get("open").and_then(Value::as_bool).unwrap_or(!self.assistant.review_open);
                 json!({"open":self.assistant.review_open})
@@ -2034,6 +2075,7 @@ impl WordApp {
                 canvas::show(self, ui);
             });
         }
+        assistant::connection(self, &ctx);
         content_controls::popup(self, &ctx);
         dialogs::show(self, &ctx);
         #[cfg(not(target_arch = "wasm32"))]

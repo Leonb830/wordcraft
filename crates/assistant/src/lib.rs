@@ -13,18 +13,36 @@ pub const MAX_PROMPT: usize = 64 * 1024;
 /// Deliberately excludes filesystem, shell, process, configuration mutation and dynamic tools.
 #[derive(Clone, Debug)]
 pub enum Request {
+    #[cfg(feature = "test-support")]
+    ProbeDocument {
+        thread_id: String,
+        tool: String,
+        arguments: Value,
+    },
     Account,
     Login,
-    CancelLogin { login_id: String },
+    CancelLogin {
+        login_id: String,
+    },
     Logout,
     StartThread,
-    ResumeThread { thread_id: String },
-    StartTurn { thread_id: String, text: String },
-    Interrupt { thread_id: String, turn_id: String },
+    ResumeThread {
+        thread_id: String,
+    },
+    StartTurn {
+        thread_id: String,
+        text: String,
+    },
+    Interrupt {
+        thread_id: String,
+        turn_id: String,
+    },
 }
 impl Request {
     pub fn method(&self) -> &'static str {
         match self {
+            #[cfg(feature = "test-support")]
+            Self::ProbeDocument { .. } => "mcpServer/tool/call",
             Self::Account => "account/read",
             Self::Login => "account/login/start",
             Self::CancelLogin { .. } => "account/login/cancel",
@@ -37,6 +55,10 @@ impl Request {
     }
     pub fn params(&self) -> Result<Value, Error> {
         match self {
+            #[cfg(feature = "test-support")]
+            Self::ProbeDocument { thread_id, tool, arguments } => {
+                Ok(json!({"threadId":thread_id,"server":"wordcraft","tool":tool,"arguments":arguments}))
+            }
             Self::Account => Ok(json!({"refreshToken":false})),
             Self::Login => Ok(json!({"type":"chatgpt"})),
             Self::CancelLogin { login_id } => Ok(json!({"loginId":login_id})),
@@ -91,6 +113,7 @@ impl Notice {
 #[derive(Debug)]
 pub enum Event {
     Ready,
+    DocumentRequest { id: Value, thread: String, tool: String, arguments: Value },
     Response { id: u64, request: Request, result: Value },
     Notification { kind: Notice, params: Value },
     Error(Error),

@@ -37,10 +37,10 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
   - [x] Reject or refresh stale proposals without modifying newer user work.
   - **Checkpoint:** engine tests show Codex review leaves unrelated user changes untouched.
 
-- [ ] **T5 — Host the service in the native app** (4–6 h; depends on T2, T3)
-  - [ ] Connect service lifecycle to `WordApp` and native app startup/shutdown.
-  - [ ] Add runtime detection/management and in-app status/error reporting.
-  - [ ] Verify coexistence with existing control server, CLI, and MCP.
+- [x] **T5 — Host the service in the native app** (4–6 h; depends on T2, T3)
+  - [x] Connect service lifecycle to `WordApp` and native app startup/shutdown.
+  - [x] Add runtime detection/management and in-app status/error reporting.
+  - [x] Verify coexistence with existing control server, CLI, and MCP.
   - **Checkpoint:** native service starts, stops, and recovers without changing current agent paths.
 
 - [ ] **T6 — Build assistant pane and conversation basics** (6–10 h; depends on T2, T5)
@@ -153,3 +153,17 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 - Review state is session-local; persisted document metadata identifies the request, and tracked changes remain Codex-authored. Undo after acceptance refuses changes to the affected paragraph rather than restoring an old whole-document snapshot.
 - Verification was delayed by iCloud evicting task-local toolchain/build files. Download requests and Finder Keep Downloaded were applied only to this task's toolchain and checkout. The disposable registry index was preserved as `index-icloud-backup` and refreshed. Stalled intermediate builds were terminated; the final test run above completed successfully.
 - Final pre-commit `cargo xtask ci`: exit 1; fmt passes, Clippy fails on unchanged `proof/src/affix.rs:288` and `doc/src/math_linear.rs:559`; later stages skipped. An interrupted-formatting check was fixed and rerun before this result.
+
+
+### T5 — complete (2026-10-17)
+
+- Native host starts only on an explicit UI action, detects the pinned installed runtime, reports connection/sign-in/errors, and revokes sharing on disconnect/thread change. Both ordinary exit and the special macOS termination path stop and reap the runtime.
+- Added a dedicated MCP helper using stable elicitation over private stdio. Only five read tools are exposed; the host checks active thread and shared document identity/revision. No socket, control key, global configuration or context-file bridge is used.
+- `cargo test -p wordcraft-assistant --features test-support`: exit 0; 2 unit and 8 integration tests, including dedicated/foreign-server routing and rejection of unsolicited replies.
+- `cargo test -p wordcraft --test codex_bridge -- --ignored`: exit 0; actual installed Codex 0.162.1 and actual WordCraft helper complete a read round trip, exclude private text, deny file.save, and refuse mismatched context. No hosted inference or copied credentials.
+- `cargo build -p wordcraft-cli`: exit 0.
+- `cargo test -p wordcraft --test codex_host -- --ignored`: exit 0; actual macOS WordCraft window with isolated profile. Verified no automatic startup, missing runtime, signed-out status, disable/restart, killed child recovery, existing authenticated control and CLI MCP edits while Codex runs, native close, child reaping and control-key removal. The first harness run failed on a repeated synthetic selection; the harness was corrected before this successful rerun.
+- `cargo clippy -p wordcraft -p wordcraft-assistant --all-targets --no-deps -- -D warnings -A clippy::nonminimal_bool`: exit 0; allowance only for the already identified upstream boolean lint.
+- `cargo xtask layers`: exit 0, 21 crates with no violations. `git diff --check`: exit 0.
+- Pre-commit `cargo xtask ci`: exit 1; fmt passes, baseline Clippy warnings in proof/affix.rs, doc/math_linear.rs and xtask's boolean expression stop CI before subsequent stages. Full CI remains outstanding for T11.
+- Authentication UI and hosted conversations remain T8/T11 work; this task verifies signed-out status and lifecycle without using the normal Codex account.

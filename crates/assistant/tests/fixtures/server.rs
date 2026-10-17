@@ -45,9 +45,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let method = request.get("method").and_then(Value::as_str).unwrap_or("");
         let id = request.get("id").cloned().unwrap_or(Value::Null);
         if method == "initialized" {
+            if mode == "document" || mode == "foreign-document" {
+                send(
+                    &mut output,
+                    json!({"id":"document-1","method":"mcpServer/elicitation/request","params":{
+                        "serverName":if mode == "document" {"wordcraft"} else {"foreign"},"threadId":"fixture-thread","mode":"form",
+                        "_meta":{"wordcraftCall":{"name":"read_context","arguments":{"documentId":1,"revision":1}}}
+                    }}),
+                )?;
+            }
             if mode == "blocked-write" {
                 std::thread::sleep(std::time::Duration::from_secs(60));
             }
+            continue;
+        }
+        if id == json!("document-1") {
+            let valid = if mode == "document" {
+                request.pointer("/result/content/result").and_then(Value::as_str) == Some("{\"ok\":true}")
+            } else {
+                request.pointer("/result/action").and_then(Value::as_str) == Some("decline")
+            };
+            send(&mut output, json!({"method":"item/agentMessage/delta","params":{"delta":if valid {"reply accepted"} else {"bad reply"}}}))?;
             continue;
         }
         if method == "initialize" {

@@ -121,3 +121,29 @@ fn raw_provider_errors_are_not_reflected() {
         other => panic!("{other:?}"),
     }
 }
+
+#[test]
+fn only_the_dedicated_document_relay_can_request_host_data() {
+    for mode in ["document", "foreign-document"] {
+        let (_temp, launch) = fixture(mode);
+        let mut runtime = Runtime::start(launch).unwrap();
+        assert!(matches!(event(&mut runtime), Event::Ready));
+        if mode == "document" {
+            let Event::DocumentRequest { id, thread, tool, arguments } = event(&mut runtime) else { panic!("expected document request") };
+            assert_eq!(thread, "fixture-thread");
+            assert_eq!(tool, "read_context");
+            assert_eq!(arguments["revision"], 1);
+            runtime.document_reply(id, serde_json::json!({"ok":true})).unwrap();
+        }
+        let Event::Notification { kind: Notice::Delta, params } = event(&mut runtime) else { panic!("expected confirmation") };
+        assert_eq!(params["delta"], "reply accepted");
+    }
+}
+#[test]
+fn unsolicited_document_replies_are_rejected() {
+    let (_temp, launch) = fixture("normal");
+    let mut runtime = Runtime::start(launch).unwrap();
+    assert!(matches!(event(&mut runtime), Event::Ready));
+    runtime.document_reply(serde_json::json!("unknown"), serde_json::json!({})).unwrap();
+    assert!(matches!(event(&mut runtime), Event::Error(Error::Protocol)));
+}

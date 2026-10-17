@@ -2,10 +2,69 @@
 use crate::WordApp;
 use serde_json::json;
 
-#[derive(Default)]
+#[derive(Clone, Copy)]
+pub enum Action {
+    Connect,
+    Disconnect,
+    Account,
+    ShareSelection,
+    ShareDocument,
+    Revoke,
+}
+
 pub struct State {
+    pub connection_open: bool,
+    pub enabled: bool,
+    pub status: String,
+    pub binary: String,
+    pub signed_in: Option<bool>,
+    pub actions: std::collections::VecDeque<Action>,
     pub review_open: bool,
     pub error: Option<String>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            connection_open: false,
+            enabled: false,
+            status: if cfg!(target_arch = "wasm32") { "Codex requires the desktop app." } else { "Codex is disabled." }.into(),
+            binary: String::new(),
+            signed_in: None,
+            actions: Default::default(),
+            review_open: false,
+            error: None,
+        }
+    }
+}
+
+pub fn connection(app: &mut WordApp, ctx: &egui::Context) {
+    if !app.assistant.connection_open {
+        return;
+    }
+    let mut open = true;
+    egui::Window::new("Codex connection").open(&mut open).resizable(true).show(ctx, |ui| {
+        ui.label(&app.assistant.status);
+        ui.label("Installed Codex 0.162.1 executable (leave blank to detect)");
+        ui.text_edit_singleline(&mut app.assistant.binary);
+        ui.label("WordCraft uses its own Codex profile. Document sharing is off until you choose a scope.");
+        ui.add_enabled_ui(!cfg!(target_arch = "wasm32"), |ui| {
+            ui.horizontal(|ui| {
+                if ui.button("Start / restart Codex").clicked() {
+                    let _ = app.run("ui.assistantConnect", json!({}));
+                }
+                if ui.button("Disable Codex").clicked() {
+                    let _ = app.run("ui.assistantDisconnect", json!({}));
+                }
+                if ui.button("Check sign-in").clicked() {
+                    let _ = app.run("ui.assistantAccount", json!({}));
+                }
+            });
+        });
+    });
+    if !open {
+        app.assistant.connection_open = false;
+    }
 }
 
 pub fn show_review(app: &mut WordApp, ui: &mut egui::Ui) {

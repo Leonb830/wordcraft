@@ -28,9 +28,13 @@ pub struct Launch {
     pub document_bridge: Option<DocumentBridge>,
     pub timeout: Duration,
 }
+enum Input {
+    Request(Request),
+    DocumentReply { id: Value, result: Value },
+}
 /// Dropping the owner stops and reaps the process, even if a queue is full.
 pub struct Runtime {
-    requests: SyncSender<Request>,
+    requests: SyncSender<Input>,
     events: Receiver<Event>,
     stop: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
@@ -55,10 +59,17 @@ impl Runtime {
     }
     pub fn send(&self, request: Request) -> Result<(), Error> {
         request.params()?;
-        self.requests.try_send(request).map_err(|error| match error {
+        self.requests.try_send(Input::Request(request)).map_err(|error| match error {
             mpsc::TrySendError::Full(_) => Error::Backpressure,
             mpsc::TrySendError::Disconnected(_) => Error::ChildExited,
         })
+    }
+    /// Only replies to a pending request from the dedicated WordCraft MCP relay.
+    pub fn document_reply(&self, id: Value, result: Value) -> Result<(), Error> {
+        if serde_json::to_vec(&result).map_err(|_| Error::Protocol)?.len() > MAX_MESSAGE / 2 {
+            return Err(Error::MessageLimit);
+        }
+        self.requests.try_send(Input::DocumentReply { id, result }).map_err(|_| Error::Backpressure)
     }
     pub fn poll(&mut self) -> Option<Event> {
         match self.events.try_recv() {
@@ -166,6 +177,11 @@ fn prepare(launch: &Launch) -> Result<(), Error> {
     {
         return Err(Error::Configuration);
     }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&launch.home, std::fs::Permissions::from_mode(0o700)).map_err(|_| Error::Configuration)?;
+    }
     let mut config = String::from(
         "approval_policy = \"on-request\"\nsandbox_mode = \"read-only\"\nweb_search = \"disabled\"\n[analytics]\nenabled = false\n[otel]\nlog_user_prompt = false\n",
     );
@@ -177,7 +193,7 @@ fn prepare(launch: &Launch) -> Result<(), Error> {
     }
     std::fs::write(launch.home.join("config.toml"), config).map_err(|_| Error::Configuration)
 }
-fn run(launch: Launch, requests: Receiver<Request>, events: &SyncSender<Event>, stop: &AtomicBool) -> Result<(), Error> {
+fn run(launch: Launch, requests: Receiver<Input>, events: &SyncSender<Event>, stop: &AtomicBool) -> Result<(), Error> {
     version(&launch, stop)?;
     prepare(&launch)?;
     let mut command = Command::new(&launch.binary);
@@ -219,7 +235,7 @@ fn run(launch: Launch, requests: Receiver<Request>, events: &SyncSender<Event>, 
 }
 fn pump(
     input: &SyncSender<Value>,
-    requests: Receiver<Request>,
+    requests: Receiver<Input>,
     events: &SyncSender<Event>,
     stop: &AtomicBool,
     rx: Receiver<Result<Option<Value>, Error>>,
@@ -233,16 +249,27 @@ fn pump(
     let mut ready = false;
     let mut next = 1u64;
     let mut pending = BTreeMap::<u64, (Request, Instant)>::new();
+    let mut document_pending = BTreeMap::<String, Instant>::new();
     while !stop.load(Ordering::Acquire) {
         if !ready && Instant::now() >= init_deadline {
             return Err(Error::Timeout);
         }
-        if pending.values().any(|(_, deadline)| Instant::now() >= *deadline) {
+        if pending.values().any(|(_, deadline)| Instant::now() >= *deadline) || document_pending.values().any(|deadline| Instant::now() >= *deadline)
+        {
             return Err(Error::Timeout);
         }
-        if ready && pending.len() < QUEUE {
+        if ready {
             match requests.try_recv() {
-                Ok(request) => {
+                Ok(Input::DocumentReply { id, result }) => {
+                    if document_pending.remove(&id.to_string()).is_none() {
+                        return Err(Error::Protocol);
+                    }
+                    enqueue(input, json!({"id":id,"result":{"action":"accept","content":{"result":result.to_string()}}}))?;
+                }
+                Ok(Input::Request(request)) => {
+                    if pending.len() >= QUEUE {
+                        return Err(Error::Backpressure);
+                    }
                     let params = request.params()?;
                     enqueue(input, json!({"id":next,"method":request.method(),"params":params}))?;
                     pending.insert(next, (request, Instant::now() + timeout));
@@ -260,6 +287,31 @@ fn pump(
         };
         if let Some(method) = value.get("method").and_then(Value::as_str) {
             if let Some(id) = value.get("id") {
+                if method == "mcpServer/elicitation/request" {
+                    let params = value.get("params").unwrap_or(&Value::Null);
+                    if params.get("serverName").and_then(Value::as_str) == Some("wordcraft")
+                        && params.get("mode").and_then(Value::as_str) == Some("form")
+                        && let Some(call) = params.pointer("/_meta/wordcraftCall")
+                        && let (Some(thread), Some(tool)) = (params.get("threadId").and_then(Value::as_str), call.get("name").and_then(Value::as_str))
+                        && tool.len() <= 128
+                        && thread.len() <= 128
+                        && (id.is_number() || id.is_string())
+                    {
+                        if document_pending.len() >= 32 || document_pending.insert(id.to_string(), Instant::now() + timeout).is_some() {
+                            return Err(Error::Backpressure);
+                        }
+                        emit(
+                            events,
+                            Event::DocumentRequest {
+                                id: id.clone(),
+                                thread: thread.into(),
+                                tool: tool.into(),
+                                arguments: call.get("arguments").cloned().unwrap_or(Value::Null),
+                            },
+                        )?;
+                        continue;
+                    }
+                }
                 // Runtime requests cannot authorize document edits. All writes use WordCraft's gate.
                 let result = match method {
                     "item/commandExecution/requestApproval" | "item/fileChange/requestApproval" => Some(json!({"decision":"decline"})),

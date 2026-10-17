@@ -13,6 +13,8 @@ mod animations;
 #[cfg(target_os = "macos")]
 mod apple_events;
 mod clipboard;
+mod codex_bridge;
+mod codex_service;
 mod control_server;
 mod default_apps;
 mod file_dialogs;
@@ -38,13 +40,15 @@ struct App(
     Option<WindowGeometry>,
     Option<control_server::KeyFile>,
     file_dialogs::Launcher,
+    codex_service::Host,
     #[cfg(target_os = "macos")] fmv_macos_events::Inbox,
 );
 
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         #[cfg(target_os = "macos")]
-        apple_events::poll(&self.4, &mut self.0, ctx);
+        apple_events::poll(&self.5, &mut self.0, ctx);
+        self.4.tick(&mut self.0, ctx);
         self.0.logic(ctx);
         self.3.show(frame);
         // A window that doesn't fit on its screen (the default size on a laptop) shrinks to fit
@@ -77,6 +81,7 @@ impl eframe::App for App {
             {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 self.0.quit_requested = false;
+                self.4.shutdown();
                 schedule_macos_terminate(&self.0, self.2.as_ref());
             }
             #[cfg(not(target_os = "macos"))]
@@ -93,6 +98,7 @@ impl eframe::App for App {
         self.3.show(frame);
     }
     fn on_exit(&mut self) {
+        self.4.shutdown();
         print::finish_pending_jobs();
         save_prefs(&self.0);
         if let Some(key_file) = &self.2 {
@@ -317,6 +323,14 @@ fn open_non_unicode(app: &mut WordApp, path: &std::path::Path) {
 }
 
 fn main() -> eframe::Result {
+    if std::env::args_os().nth(1).is_some_and(|a| a == "--codex-document-bridge") {
+        // Protocol helper: no logger, preferences, GUI or arbitrary file arguments.
+        if codex_bridge::run().is_err() {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
     // First, so the panic hook and every start-up warning are recorded (`logging`).
     let logger = logging::install();
     logging::install_panic_hook();
@@ -473,6 +487,7 @@ fn main() -> eframe::Result {
                 Some(restored.unwrap_or_default()),
                 key_file,
                 dialogs,
+                codex_service::Host::default(),
                 #[cfg(target_os = "macos")]
                 apple_events.connect(&cc.egui_ctx),
             )))

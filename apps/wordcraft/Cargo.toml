@@ -11,6 +11,8 @@ description = "WordCraft desktop app"
 workspace = true
 
 [dependencies]
+wordcraft-assistant = { workspace = true }
+wordcraft-mcp = { workspace = true }
 wordcraft-doc = { workspace = true }
 wordcraft-engine = { workspace = true }
 wordcraft-proof = { workspace = true }
@@ -80,4 +82,5 @@ arboard = { workspace = true, features = ["image-data"] }
 getrandom = "0.3"
 
 [dev-dependencies]
-wordcraft-mcp = { workspace = true }
+wordcraft-assistant = { workspace = true, features = ["test-support"] }
+tempfile = "3"
