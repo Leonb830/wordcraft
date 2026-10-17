@@ -1,0 +1,9 @@
+[package]
+name = "wordcraft-codex-spike"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde_json = "1"
+
+[workspace]
