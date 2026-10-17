@@ -22,6 +22,7 @@ macro_rules! tl {
 
 pub mod a11y;
 pub mod a11y_pane;
+pub mod assistant;
 pub mod async_saves;
 pub mod autoscroll;
 pub mod backstage;
@@ -418,6 +419,7 @@ fn migrate_units(v: &mut Value) {
 
 /// The application.
 pub struct WordApp {
+    pub assistant: assistant::State,
     pub session: Session,
     pub ui: UiState,
     pub services: Services,
@@ -571,6 +573,7 @@ impl WordApp {
             wordcraft_engine::set_system_locale(&tag);
         }
         WordApp {
+            assistant: Default::default(),
             session,
             ui: UiState::default(),
             services,
@@ -1280,6 +1283,16 @@ impl WordApp {
     fn ui_command(&mut self, id: &str, p: &Value) -> Option<Result<Value, String>> {
         let s = |k: &str| p.get(k).and_then(Value::as_str);
         Some(Ok(match id {
+            "ui.assistantReview" => {
+                self.assistant.review_open = p.get("open").and_then(Value::as_bool).unwrap_or(!self.assistant.review_open);
+                json!({"open":self.assistant.review_open})
+            }
+            "ui.assistantApprove" => {
+                return Some(self.session.approve_codex(s("request").unwrap_or("")).map(|()| json!({"approved":true})).map_err(|e| e.to_string()));
+            }
+            "ui.assistantDeny" => {
+                return Some(self.session.deny_codex(s("request").unwrap_or("")).map(|()| json!({"denied":true})).map_err(|e| e.to_string()));
+            }
             "ui.tab" => {
                 let tab = s("tab").unwrap_or("Home").to_string();
                 if tab == "File" {
@@ -2015,6 +2028,7 @@ impl WordApp {
                 ribbon::show(self, ui);
                 chrome::status_bar(self, ui);
                 panes::show(self, ui);
+                assistant::show_review(self, ui);
             }
             egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.canvas)).show(ui, |ui| {
                 canvas::show(self, ui);

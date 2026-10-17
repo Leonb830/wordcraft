@@ -30,11 +30,11 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
   - [x] Keep the existing MCP profile and behavior unchanged.
   - **Checkpoint:** allowlist tests pass and excluded tool classes are denied.
 
-- [ ] **T4 — Add approval and request-scoped edit review** (6–10 h; depends on T0, T3)
-  - [ ] Gate every document write behind explicit user approval.
-  - [ ] Tag edits by Codex author, thread/request, and document revision.
-  - [ ] Add request-scoped accept/reject/undo if existing review APIs cannot isolate them.
-  - [ ] Reject or refresh stale proposals without modifying newer user work.
+- [x] **T4 — Add approval and request-scoped edit review** (6–10 h; depends on T0, T3)
+  - [x] Gate every document write behind explicit user approval.
+  - [x] Tag edits by Codex author, thread/request, and document revision.
+  - [x] Add request-scoped accept/reject/undo if existing review APIs cannot isolate them.
+  - [x] Reject or refresh stale proposals without modifying newer user work.
   - **Checkpoint:** engine tests show Codex review leaves unrelated user changes untouched.
 
 - [ ] **T5 — Host the service in the native app** (4–6 h; depends on T2, T3)
@@ -140,3 +140,16 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 - `cargo fmt --all --check`: exit 0.
 - `cargo xtask ci`: exit 1; formatting passes, unchanged baseline `crates/proof/src/affix.rs:288` Clippy error remains; later CI stages skipped.
 - Excluded file/shell/UI/screenshot/save/export tool classes and resource routes denied in tests; original MCP default surface unchanged. Native test uses the separate in-process profile; runtime service wiring belongs to T5.
+
+### T4 — complete (2026-10-17)
+
+- Product code is restricted to the four planned files. Proposals do not mutate the document; host-only approve/deny UI commands check identity and revision again. Approved text gets fresh Codex insertion/deletion revision IDs, one undo step, and document custom-property audit metadata with thread/request/base revision. User author and track-changes preferences are preserved; save remains manual.
+- Initial mutation scope is bounded plain-text replacement within one paragraph. Objects, existing overlapping revisions, protected documents, content-control stories and stale proposals are refused. This conservative scope avoids pretending that arbitrary engine commands are safe for Codex.
+- `cargo test -p wordcraft-engine --lib codex_`: exit 0, 8 tests passed; approve/deny/replay, stale/document replacement, ordinary undo, scoped accept/reject/undo, two separate requests, unrelated human tracked changes including the same paragraph, accepted undo and overlap rejection.
+- `cargo test -p wordcraft-engine --lib hostile_params_never_panic`: exit 0, 1 test passed (all registered commands, including the new scoped review commands).
+- `WORDCRAFT_CODEX_REVIEW_SHOT=<task outputs>/codex-review.png cargo test --locked -p wordcraft-ui-egui --lib codex_cards`: exit 0, 4 tests passed; approval/accept/undo, deny/stale, reject, and full WordApp screenshot. Screenshot inspected: original/proposed text, revision, manual-save notice and explicit buttons visible without clipping.
+- `cargo clippy -p wordcraft-engine -p wordcraft-ui-egui --all-targets --no-deps -- -D warnings -A clippy::nonminimal_bool`: exit 0. The allowance isolates pre-existing boolean warnings in `ui-egui/src/objects.rs:248`; the unmodified strict command failed there. A new test-module ordering lint was corrected.
+- `cargo xtask ci` remains a separate baseline failure, not a passing full-workspace check. Final pre-commit result recorded below.
+- Review state is session-local; persisted document metadata identifies the request, and tracked changes remain Codex-authored. Undo after acceptance refuses changes to the affected paragraph rather than restoring an old whole-document snapshot.
+- Verification was delayed by iCloud evicting task-local toolchain/build files. Download requests and Finder Keep Downloaded were applied only to this task's toolchain and checkout. The disposable registry index was preserved as `index-icloud-backup` and refreshed. Stalled intermediate builds were terminated; the final test run above completed successfully.
+- Final pre-commit `cargo xtask ci`: exit 1; fmt passes, Clippy fails on unchanged `proof/src/affix.rs:288` and `doc/src/math_linear.rs:559`; later stages skipped. An interrupted-formatting check was fixed and rerun before this result.

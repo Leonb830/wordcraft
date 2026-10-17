@@ -30,6 +30,9 @@ pub fn specs() -> Vec<CommandSpec> {
         })
         .params(r#"{"value"?: bool (omit to toggle)}"#)
         .key("Mod+Shift+E"),
+        CommandSpec::new("review.acceptCodex", "Accept Codex Request", "Review › Codex", |s, v| codex_review(s, v, "accept")).params(r#"{"request": string}"#),
+        CommandSpec::new("review.rejectCodex", "Reject Codex Request", "Review › Codex", |s, v| codex_review(s, v, "reject")).params(r#"{"request": string}"#),
+        CommandSpec::new("review.rejectCodexUndo", "Undo Codex Request", "Review › Codex", |s, v| codex_review(s, v, "undo")).params(r#"{"request": string}"#),
         CommandSpec::new("review.acceptAll", "Accept All Changes", "Review › Changes", |s, _| resolve_all(s, true)),
         CommandSpec::new("review.rejectAll", "Reject All Changes", "Review › Changes", |s, _| resolve_all(s, false)),
         CommandSpec::new("review.accept", "Accept", "Review › Changes", |s, _| resolve_sel(s, true)),
@@ -1014,6 +1017,11 @@ pub fn tracking_json(m: &wordcraft_layout::display::MarkupOptions) -> Value {
         "changedLinesColor": hex(m.changed_lines_color, "auto"),
         "trackFormatting": m.track_formatting,
     })
+}
+
+fn codex_review(s: &mut Session, value: &Value, action: &str) -> CmdResult {
+    let request = value.get("request").and_then(Value::as_str).ok_or_else(|| CmdError::Params("request required".into()))?;
+    s.resolve_codex(request, action)
 }
 
 #[cfg(test)]
