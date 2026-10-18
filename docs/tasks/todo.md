@@ -43,10 +43,10 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
   - [x] Verify coexistence with existing control server, CLI, and MCP.
   - **Checkpoint:** native service starts, stops, and recovers without changing current agent paths.
 
-- [ ] **T6 — Build assistant pane and conversation basics** (6–10 h; depends on T2, T5)
-  - [ ] Add Assistant to the existing side-pane framework.
-  - [ ] Add composer, new/resume thread flow, and selection/document scope indicator.
-  - [ ] Add empty, loading, missing-runtime, and unsupported-target states.
+- [x] **T6 — Build assistant pane and conversation basics** (6–10 h; depends on T2, T5)
+  - [x] Add Assistant to the existing side-pane framework.
+  - [x] Add composer, new/resume thread flow, and selection/document scope indicator.
+  - [x] Add empty, loading, missing-runtime, and unsupported-target states.
   - **Checkpoint:** a user can start/resume a thread and send a prompt in-app.
 
 - [ ] **T7 — Add streaming, action cards, approvals, and stop** (5–8 h; depends on T4, T6)
@@ -167,3 +167,16 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 - `cargo xtask layers`: exit 0, 21 crates with no violations. `git diff --check`: exit 0.
 - Pre-commit `cargo xtask ci`: exit 1; fmt passes, baseline Clippy warnings in proof/affix.rs, doc/math_linear.rs and xtask's boolean expression stop CI before subsequent stages. Full CI remains outstanding for T11.
 - Authentication UI and hosted conversations remain T8/T11 work; this task verifies signed-out status and lifecycle without using the normal Codex account.
+
+
+### T6 — complete (2026-10-18)
+
+- Added a persistent title-bar Assistant entry and resizable side pane using the existing pane framework. New/resume controls, bounded recent-thread selector, bounded composer, keyboard send, visible user messages, restored plain-text history, pending states and explicit sharing controls use UI commands and typed native actions. WASM displays the desktop-only explanation and does not queue runtime actions.
+- Sharing is off by default and revoked on thread changes. The host reports selection/document scope, revision and size, and marks context stale after human edits. Failed new/resume attempts cannot silently continue a different active conversation.
+- `cargo check -p wordcraft`: exit 0.
+- `WORDCRAFT_CODEX_PANE_SHOT=<outputs>/codex-pane.png cargo test -p wordcraft-ui-egui --lib codex_pane`: exit 0, 3 tests passed. Composer/context/pending gates, keyboard entry and Command/Ctrl+Enter, new/resume, missing runtime, sharing-off and close states were exercised at 280/360-point widths. Initial harness font initialization and spinner polling failures were corrected. Accessibility inspection found an unlabeled existing pane-close control; the shared header now labels it as a button.
+- `cargo test -p wordcraft --bin wordcraft codex_conversation -- --ignored`: exit 0, 1 host test with the fake app-server. Verified thread creation/resume, selection/document sharing, stale indicator, revocation, visible submitted message, duplicate-send prevention, turn completion and disconnect.
+- `WORDCRAFT_CODEX_NATIVE_SHOT=<outputs>/codex-native-pane.png cargo test -p wordcraft --test codex_host -- --ignored`: exit 0. Actual native window and installed runtime create a thread, share/revoke context, recover from an empty-thread resume rejection, and retain T5 lifecycle/control/CLI MCP behavior. Codex does not persist a zero-turn conversation; this negative case is explicitly checked, not counted as a successful real resume. Persisted real-runtime resume was qualified in T1; hosted product conversations remain in T8/T11 verification.
+- Full WordApp and actual native screenshots inspected: pane controls and composer are readable and contained; the document remains alongside. The existing title bar and other panes are retained.
+- `cargo clippy -p wordcraft -p wordcraft-ui-egui --all-targets --no-deps -- -D warnings -A clippy::nonminimal_bool`: exit 0. `git diff --check`: exit 0.
+- Pre-commit `cargo xtask ci`: exit 1; fmt passes and the recorded baseline Clippy warnings still stop later stages. This is not full CI success.

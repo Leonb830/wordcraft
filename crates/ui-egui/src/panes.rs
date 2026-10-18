@@ -11,6 +11,15 @@ use crate::theme::{Tokens, regular, semibold};
 
 pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
+    if app.assistant.open {
+        egui::Panel::right("assistant_pane")
+            .default_size(340.0)
+            .min_size(260.0)
+            .max_size(600.0)
+            .resizable(true)
+            .frame(egui::Frame::NONE.fill(t.panel).inner_margin(10).stroke(Stroke::new(1.0, t.border)))
+            .show(ui, |ui| crate::assistant::pane(app, ui));
+    }
     // SmartArt Design › Text Pane, while a SmartArt graphic WordCraft can edit is selected.
     if app.session.view.smart_art_pane && wordcraft_engine::cmd::smart_art::selected_smart_art(&app.session).is_some() {
         egui::Panel::left("smart_art_pane")
@@ -95,7 +104,9 @@ pub(crate) fn header(ui: &mut Ui, title: &str) -> bool {
         ui.label(egui::RichText::new(tl!(title)).font(semibold(15.0)));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             // Drawn, not the "✕" character: the interface fonts have no glyph for it.
-            if crate::widgets::icon_button(ui, "close", tl!("Close")).clicked() {
+            let button = crate::widgets::icon_button(ui, "close", tl!("Close"));
+            button.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!("Close")));
+            if button.clicked() {
                 close = true;
             }
         });

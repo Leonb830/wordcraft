@@ -1283,6 +1283,45 @@ impl WordApp {
     fn ui_command(&mut self, id: &str, p: &Value) -> Option<Result<Value, String>> {
         let s = |k: &str| p.get(k).and_then(Value::as_str);
         Some(Ok(match id {
+            "ui.assistant" => {
+                self.assistant.open = p.get("open").and_then(Value::as_bool).unwrap_or(!self.assistant.open);
+                self.assistant.focus_composer = self.assistant.open;
+                json!({"open":self.assistant.open})
+            }
+            "ui.assistantNew" | "ui.assistantResume" | "ui.assistantSend" => {
+                if cfg!(target_arch = "wasm32") || !self.assistant.enabled {
+                    return Some(Err("Start Codex in the desktop app first.".into()));
+                }
+                if self.assistant.pending || self.assistant.actions.len() >= 32 {
+                    return Some(Err("Wait for the current assistant action.".into()));
+                }
+                let action = match id {
+                    "ui.assistantNew" => assistant::Action::NewThread,
+                    "ui.assistantResume" => {
+                        let thread = s("thread").unwrap_or("");
+                        if thread.is_empty() || thread.len() > 128 || !thread.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+                            return Some(Err("Enter a valid conversation ID.".into()));
+                        }
+                        assistant::Action::Resume(thread.into())
+                    }
+                    _ => {
+                        if let Some(text) = s("text") {
+                            if text.len() > 64 * 1024 {
+                                return Some(Err("The message is too long.".into()));
+                            }
+                            self.assistant.composer = text.into();
+                        }
+                        if !self.assistant.can_send() {
+                            return Some(Err("Start a conversation and enter a message first.".into()));
+                        }
+                        assistant::Action::Send(self.assistant.composer.clone())
+                    }
+                };
+                self.assistant.pending = true;
+                self.assistant.error = None;
+                self.assistant.actions.push_back(action);
+                json!({"queued":true})
+            }
             "ui.assistantShareSelection" | "ui.assistantShareDocument" | "ui.assistantRevoke" => {
                 if cfg!(target_arch = "wasm32") {
                     return Some(Err("Codex requires the desktop app.".into()));
@@ -1297,7 +1336,9 @@ impl WordApp {
                 });
                 json!({"queued":true})
             }
-            "ui.assistantStatus" => json!({"enabled":self.assistant.enabled,"status":self.assistant.status,"signedIn":self.assistant.signed_in}),
+            "ui.assistantStatus" => {
+                json!({"enabled":self.assistant.enabled,"status":self.assistant.status,"signedIn":self.assistant.signed_in,"thread":self.assistant.thread,"pending":self.assistant.pending,"sharing":self.assistant.sharing})
+            }
             "ui.assistantConnection" => {
                 self.assistant.connection_open = true;
                 json!({"open":true})

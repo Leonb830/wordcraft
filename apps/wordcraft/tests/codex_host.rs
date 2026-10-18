@@ -84,6 +84,22 @@ fn native_runtime_restart_crash_shutdown_and_existing_mcp() {
         control.execute("text.insert", json!({"text":"Native coexistence"}));
         assert!(control.call("document.inspect", json!({})).to_string().contains("Native coexistence"));
         if cycle == 0 {
+            control.execute("ui.assistant", json!({"open":true}));
+            control.execute("ui.assistantNew", json!({}));
+            wait(|| control.status()["thread"].is_string());
+            let thread = control.status()["thread"].clone();
+            control.execute("ui.assistantShareDocument", json!({}));
+            wait(|| control.status()["sharing"].as_str().is_some_and(|s| s.starts_with("Sharing document")));
+            control.execute("ui.assistantResume", json!({"thread":thread}));
+            wait(|| control.status()["pending"] == false);
+            assert_eq!(control.status()["sharing"], "Document sharing is off.");
+            // Codex does not persist a zero-turn thread yet. Verify the recovery state, rather than claiming a successful resume.
+            assert!(control.status()["status"].as_str().is_some_and(|s| s.contains("rejected")));
+            control.execute("ui.assistantNew", json!({}));
+            wait(|| control.status()["status"] == "Conversation ready.");
+            if let Ok(path) = std::env::var("WORDCRAFT_CODEX_NATIVE_SHOT") {
+                control.call("ui.screenshot", json!({"path":path}));
+            }
             let cli = std::path::Path::new(env!("CARGO_BIN_EXE_wordcraft")).with_file_name("wordcraft-cli");
             let mut mcp = Owned(
                 Command::new(cli)
