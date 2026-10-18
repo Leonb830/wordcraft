@@ -55,10 +55,10 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
   - [x] Add stop, retry, disconnect, and recoverable error behavior.
   - **Checkpoint:** no UI or protocol event can bypass the write approval path.
 
-- [ ] **T8 — Add auth, thread references, settings, and privacy controls** (4–7 h; depends on T1, T5, T6)
-  - [ ] Implement selected supported sign-in/status behavior.
-  - [ ] Persist only necessary thread references and UI settings.
-  - [ ] Add disable/clear-reference controls and verify logs exclude content/secrets.
+- [x] **T8 — Add auth, thread references, settings, and privacy controls** (4–7 h; depends on T1, T5, T6)
+  - [x] Implement selected supported sign-in/status behavior.
+  - [x] Persist only necessary thread references and UI settings.
+  - [x] Add disable/clear-reference controls and verify logs exclude content/secrets.
   - **Checkpoint:** signed-out, expired-auth, resume, and clear states work.
 
 - [ ] **T9 — Complete runtime distribution and platform behavior** (4–8 h; depends on T1, T5, T8)
@@ -197,7 +197,7 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 - `cargo clippy -p wordcraft -p wordcraft-ui-egui -p wordcraft-mcp -p wordcraft-assistant --all-targets --no-deps -- -D warnings -A clippy::nonminimal_bool`: exit 0 after removing a new needless-return warning. `git diff --check`: exit 0.
 - Pre-commit `cargo xtask ci`: exit 1; fmt passes, recorded upstream Clippy warnings still stop later stages. Full CI is still outstanding.
 
-### T8 — implemented; live sign-in verification pending (2026-10-18)
+### T8 — complete (2026-10-18)
 
 - Added browser sign-in/cancel/logout/status UI, expired-auth revocation, bounded private preference persistence, clear-reference and disable controls. No global Codex configuration or credentials were copied. The ADR documents exactly what remains in the dedicated profile.
 - `cargo test -p wordcraft --bin wordcraft codex_ -- --include-ignored`: exit 0, 7 tests passed, including actual installed runtime sign-in URL validation, cancellation and logout; host auth ordering/foreign login/expiry, settings privacy and symlink/size refusal. Initial test assumptions about logout notification ordering and an unchanged preference file were corrected before this passing run.
@@ -207,3 +207,5 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 - `cargo clippy -p wordcraft -p wordcraft-ui-egui -p wordcraft-assistant --all-targets --no-deps -- -D warnings -A clippy::nonminimal_bool`: exit 0. `git diff --check`: exit 0.
 - Pre-commit `cargo xtask ci`: exit 1; fmt passes, recorded baseline Clippy failures still prevent later stages. Full CI is not passing.
 - A native WordCraft window is open with a separate task-owned profile for the requested live browser sign-in. User completion is pending. T8 remains unchecked; T9–T11 have not started.
+
+- User completed browser sign-in in the separate WordCraft profile. Native control status confirms signedIn=true. Hosted turn returned the exact requested synthetic sentence; native screenshot `codex-live-auth.png` inspected. Disabled/restarted the real runtime, then resumed the same persisted thread: two messages restored, signedIn=true, sharing off. No credentials were read or copied. T8 is now complete; the earlier pending note is superseded.

@@ -276,6 +276,11 @@ pub fn connection(app: &mut WordApp, ctx: &egui::Context) {
     let mut open = true;
     egui::Window::new("Codex connection").default_width(520.0).open(&mut open).resizable(true).show(ctx, |ui| {
         ui.label(&app.assistant.status);
+        ui.label(match app.assistant.signed_in {
+            Some(true) => "Signed in to WordCraft's Codex profile.",
+            Some(false) => "Signed out of WordCraft's Codex profile.",
+            None => "Sign-in status has not been checked.",
+        });
         ui.label("Sign in with ChatGPT in your browser. Credentials stay in WordCraft's separate Codex profile.");
         ui.horizontal_wrapped(|ui| {
             if ui.add_enabled(!cfg!(target_arch = "wasm32") && !app.assistant.auth_pending, egui::Button::new(tl!("Sign in with ChatGPT"))).clicked()
