@@ -29,3 +29,27 @@ Local packaging: `packaging/macos/package.sh --arch universal`, `packaging/windo
 Dry run: `gh workflow run release.yml --ref <branch>` builds the unsigned jobs (version, Linux,
 Linux riscv64, Flatpak, FreeBSD, web) on any branch; the signing jobs are refused there by the `release`
 environment's branch rule, so no draft release is made.
+
+## Codex runtime qualification
+
+The in-app assistant discovers a separately installed **Codex 0.162.1** native
+executable. It is not bundled, silently downloaded, or upgraded by WordCraft.
+Connection settings links to the pinned upstream release and accepts an absolute
+executable path. A version mismatch disables only the assistant. The stdio MCP
+helper is the same WordCraft binary invoked with `--codex-document-bridge`, so
+packagers must preserve that entry point; no additional helper asset is needed.
+
+The upstream release has native binaries for macOS, Windows and Linux on x86_64
+and aarch64. `.github/workflows/codex-native.yml` qualifies these six combinations
+using fresh profiles, the real pinned runtime, document-relay boundary checks,
+and a native-window smoke test (Xvfb on Linux). It does not use account credentials
+or publish artifacts/releases. Record the successful run before claiming a
+platform is qualified. Local macOS arm64 and WASM verification are also recorded
+in [the task checklist](tasks/todo.md).
+
+FreeBSD, Linux riscv64, 32-bit Windows and the web retain editing and saving but
+do not expose a working in-app Codex connection. Flatpak's existing sandbox does
+not permit the external runtime/network flow: the host reports this and suggests
+a native package or AppImage. Do not add host filesystem, network, or process
+escape permissions to Flatpak for this feature. Ordinary CLI/MCP packaging is
+unchanged. Native packages do not require signing or shipping a Codex binary.

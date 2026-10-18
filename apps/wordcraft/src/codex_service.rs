@@ -157,6 +157,15 @@ impl Host {
         }
     }
     fn start(&mut self, app: &mut WordApp) -> Result<(), String> {
+        if !wordcraft_ui_egui::assistant::runtime_supported() {
+            return Err(wordcraft_ui_egui::assistant::UNAVAILABLE.into());
+        }
+        if std::env::var_os("FLATPAK_ID").is_some() {
+            return Err(
+                "Codex cannot use an external executable from Flatpak. Use WordCraft's native package or AppImage; editing remains available here."
+                    .into(),
+            );
+        }
         self.shutdown();
         Self::clear_auth(app);
         app.assistant.enabled = false;

@@ -1,4 +1,10 @@
 //! Host-only proposal approval and request review. No runtime messages can invoke these actions.
+/// Platforms for which the pinned Codex release provides a native executable.
+pub const fn runtime_supported() -> bool {
+    cfg!(all(any(target_os = "macos", target_os = "windows", target_os = "linux"), any(target_arch = "x86_64", target_arch = "aarch64")))
+}
+pub const UNAVAILABLE: &str =
+    "Codex requires 64-bit macOS, Windows or Linux with the supported runtime. Document editing and saving remain available.";
 use crate::WordApp;
 use serde_json::json;
 
@@ -77,7 +83,7 @@ impl Default for State {
             focus_composer: false,
             connection_open: false,
             enabled: false,
-            status: if cfg!(target_arch = "wasm32") { "Codex requires the desktop app." } else { "Codex is disabled." }.into(),
+            status: if !runtime_supported() { UNAVAILABLE } else { "Codex is disabled." }.into(),
             binary: String::new(),
             signed_in: None,
             actions: Default::default(),
@@ -145,7 +151,7 @@ pub fn pane(app: &mut WordApp, ui: &mut egui::Ui) {
         return;
     }
     ui.add(egui::Label::new(&app.assistant.sharing).wrap());
-    if !cfg!(target_arch = "wasm32") {
+    if runtime_supported() {
         egui::Panel::bottom("assistant_composer_panel").exact_size(200.0).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 if ui.add_enabled(app.assistant.pending, egui::Button::new(tl!("Stop response"))).clicked() {
@@ -191,8 +197,8 @@ pub fn pane(app: &mut WordApp, ui: &mut egui::Ui) {
         if ui.button(tl!("Connection settings")).clicked() {
             let _ = app.run("ui.assistantConnection", json!({}));
         }
-        if cfg!(target_arch = "wasm32") {
-            ui.label(tl!("Open the desktop app to use Codex. You can keep editing here."));
+        if !runtime_supported() {
+            ui.label(UNAVAILABLE);
             return;
         }
         if !app.assistant.enabled && ui.button(tl!("Start Codex")).clicked() {
@@ -283,8 +289,7 @@ pub fn connection(app: &mut WordApp, ctx: &egui::Context) {
         });
         ui.label("Sign in with ChatGPT in your browser. Credentials stay in WordCraft's separate Codex profile.");
         ui.horizontal_wrapped(|ui| {
-            if ui.add_enabled(!cfg!(target_arch = "wasm32") && !app.assistant.auth_pending, egui::Button::new(tl!("Sign in with ChatGPT"))).clicked()
-            {
+            if ui.add_enabled(runtime_supported() && !app.assistant.auth_pending, egui::Button::new(tl!("Sign in with ChatGPT"))).clicked() {
                 let _ = app.run("ui.assistantSignIn", json!({}));
             }
             if ui.add_enabled(app.assistant.auth_pending, egui::Button::new(tl!("Cancel sign-in"))).clicked() {
@@ -313,10 +318,12 @@ pub fn connection(app: &mut WordApp, ctx: &egui::Context) {
             ))
             .wrap(),
         );
+        ui.hyperlink_to("Get Codex 0.162.1 for your computer", "https://github.com/openai/codex/releases/tag/rust-v0.162.1");
+        ui.label("Extract the native Codex executable and enter its full path below. WordCraft does not install or update it.");
         ui.label("Installed Codex 0.162.1 executable (leave blank to detect)");
         ui.text_edit_singleline(&mut app.assistant.binary);
         ui.label("WordCraft uses its own Codex profile. Document sharing is off until you choose a scope.");
-        ui.add_enabled_ui(!cfg!(target_arch = "wasm32"), |ui| {
+        ui.add_enabled_ui(runtime_supported(), |ui| {
             ui.horizontal_wrapped(|ui| {
                 if ui.button("Start / restart Codex").clicked() {
                     let _ = app.run("ui.assistantConnect", json!({}));

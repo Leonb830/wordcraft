@@ -1289,8 +1289,8 @@ impl WordApp {
                 json!({"open":self.assistant.open})
             }
             "ui.assistantSignIn" | "ui.assistantCancelSignIn" | "ui.assistantSignOut" | "ui.assistantClearReferences" => {
-                if cfg!(target_arch = "wasm32") || self.assistant.actions.len() >= 32 {
-                    return Some(Err("Codex requires the desktop app.".into()));
+                if !assistant::runtime_supported() || self.assistant.actions.len() >= 32 {
+                    return Some(Err(assistant::UNAVAILABLE.into()));
                 }
                 let action = match id {
                     "ui.assistantSignIn" => {
@@ -1310,7 +1310,7 @@ impl WordApp {
                 json!({"queued":true})
             }
             "ui.assistantStop" | "ui.assistantRetry" => {
-                if cfg!(target_arch = "wasm32") || !self.assistant.enabled || self.assistant.actions.len() >= 32 {
+                if !assistant::runtime_supported() || !self.assistant.enabled || self.assistant.actions.len() >= 32 {
                     return Some(Err("Codex is unavailable.".into()));
                 }
                 if id == "ui.assistantStop" {
@@ -1325,7 +1325,7 @@ impl WordApp {
                 json!({"queued":true})
             }
             "ui.assistantNew" | "ui.assistantResume" | "ui.assistantSend" => {
-                if cfg!(target_arch = "wasm32") || !self.assistant.enabled {
+                if !assistant::runtime_supported() || !self.assistant.enabled {
                     return Some(Err("Start Codex in the desktop app first.".into()));
                 }
                 if self.assistant.pending || self.assistant.actions.len() >= 32 {
@@ -1359,8 +1359,8 @@ impl WordApp {
                 json!({"queued":true})
             }
             "ui.assistantShareSelection" | "ui.assistantShareDocument" | "ui.assistantRevoke" => {
-                if cfg!(target_arch = "wasm32") {
-                    return Some(Err("Codex requires the desktop app.".into()));
+                if !assistant::runtime_supported() {
+                    return Some(Err(assistant::UNAVAILABLE.into()));
                 }
                 if self.assistant.actions.len() >= 32 {
                     return Some(Err("Too many pending assistant actions.".into()));
@@ -1380,8 +1380,8 @@ impl WordApp {
                 json!({"open":true})
             }
             "ui.assistantConnect" | "ui.assistantDisconnect" | "ui.assistantAccount" => {
-                if cfg!(target_arch = "wasm32") {
-                    return Some(Err("Codex requires the desktop app.".into()));
+                if !assistant::runtime_supported() {
+                    return Some(Err(assistant::UNAVAILABLE.into()));
                 }
                 if self.assistant.actions.len() >= 32 {
                     return Some(Err("Too many pending assistant actions.".into()));
