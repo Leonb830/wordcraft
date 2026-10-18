@@ -135,3 +135,26 @@ already enabled AutoSave could otherwise persist an approved edit on the next UI
 tick despite the integration's manual-save promise. The card explains the pause.
 The user can save normally or explicitly turn AutoSave back on. No other existing
 integration or save command is removed.
+
+## T8 account and preference isolation (2026-10-18)
+
+The connection dialog uses stable ChatGPT browser login, cancellation, account
+status and logout requests. Login links are accepted only from the qualified
+`https://auth.openai.com/` origin and are never exposed through control status or
+preferences. Cancellation stays pending until acknowledged, preventing a new
+login from racing the old one. Expired account notifications revoke document
+sharing. Logout affects only WordCraft's dedicated profile.
+
+`codex/assistant.json` stores versioned pane visibility, executable path and at
+most 20 validated thread IDs. It contains no transcript, prompt, account detail,
+login URL, credential or sharing grant. Reads and writes are bounded; writes use
+an atomic replacement and private Unix permissions. Symlinked preference files
+and aliases into either normal Codex home are rejected. The runtime also rejects
+global-home descendants before creating folders. Clear references disconnects,
+clears the local list and conversation UI, and denies outstanding previews. It
+does not delete Codex's canonical conversation records or document audit data.
+
+Codex owns credentials in its private home using the supported file credential
+store, avoiding the global keyring. Auxiliary `history.jsonl` persistence and
+runtime logging are disabled; canonical Codex thread storage remains available
+for resume. WordCraft does not log protocol payloads or provider error text.

@@ -1288,6 +1288,27 @@ impl WordApp {
                 self.assistant.focus_composer = self.assistant.open;
                 json!({"open":self.assistant.open})
             }
+            "ui.assistantSignIn" | "ui.assistantCancelSignIn" | "ui.assistantSignOut" | "ui.assistantClearReferences" => {
+                if cfg!(target_arch = "wasm32") || self.assistant.actions.len() >= 32 {
+                    return Some(Err("Codex requires the desktop app.".into()));
+                }
+                let action = match id {
+                    "ui.assistantSignIn" => {
+                        if self.assistant.auth_pending {
+                            return Some(Err("Sign-in is already in progress.".into()));
+                        }
+                        self.assistant.auth_pending = true;
+                        self.assistant.open_login = true;
+                        self.assistant.connection_open = true;
+                        assistant::Action::SignIn
+                    }
+                    "ui.assistantCancelSignIn" => assistant::Action::CancelSignIn,
+                    "ui.assistantSignOut" => assistant::Action::SignOut,
+                    _ => assistant::Action::ClearReferences,
+                };
+                self.assistant.actions.push_back(action);
+                json!({"queued":true})
+            }
             "ui.assistantStop" | "ui.assistantRetry" => {
                 if cfg!(target_arch = "wasm32") || !self.assistant.enabled || self.assistant.actions.len() >= 32 {
                     return Some(Err("Codex is unavailable.".into()));
@@ -1352,7 +1373,7 @@ impl WordApp {
                 json!({"queued":true})
             }
             "ui.assistantStatus" => {
-                json!({"enabled":self.assistant.enabled,"status":self.assistant.status,"signedIn":self.assistant.signed_in,"thread":self.assistant.thread,"pending":self.assistant.pending,"sharing":self.assistant.sharing,"activity":self.assistant.activity,"turn":self.assistant.turn,"messageCount":self.assistant.messages.len()})
+                json!({"enabled":self.assistant.enabled,"status":self.assistant.status,"signedIn":self.assistant.signed_in,"thread":self.assistant.thread,"pending":self.assistant.pending,"sharing":self.assistant.sharing,"activity":self.assistant.activity,"turn":self.assistant.turn,"messageCount":self.assistant.messages.len(),"authPending":self.assistant.auth_pending,"recentCount":self.assistant.recent.len()})
             }
             "ui.assistantConnection" => {
                 self.assistant.connection_open = true;

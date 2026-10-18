@@ -9,6 +9,10 @@ use wordcraft_ui_egui::{WordApp, assistant::Action};
 
 pub struct Host {
     runtime: Option<Runtime>,
+    loaded: bool,
+    settings_enabled: bool,
+    settings_value: Option<serde_json::Value>,
+    login_cancelled: bool,
     turn: Option<String>,
     starting_turn: bool,
     stop_requested: bool,
@@ -22,6 +26,10 @@ impl Default for Host {
     fn default() -> Self {
         Self {
             runtime: None,
+            loaded: false,
+            settings_enabled: std::env::var_os("WORDCRAFT_NO_PREFS").is_none(),
+            settings_value: None,
+            login_cancelled: false,
             turn: None,
             starting_turn: false,
             stop_requested: false,
@@ -34,6 +42,54 @@ impl Default for Host {
     }
 }
 impl Host {
+    pub fn persist(&mut self, app: &mut WordApp) {
+        if !self.settings_enabled {
+            return;
+        }
+        let Some(root) = &self.root else { return };
+        let value = crate::codex_settings::value(&app.assistant);
+        if self.settings_value.as_ref() == Some(&value) {
+            return;
+        }
+        match crate::codex_settings::save(root, &value) {
+            Ok(()) => self.settings_value = Some(value),
+            Err(error) => {
+                app.assistant.error = Some(error.into());
+                self.settings_enabled = false;
+            }
+        }
+    }
+    fn clear_auth(app: &mut WordApp) {
+        app.assistant.auth_pending = false;
+        app.assistant.login_url = None;
+        app.assistant.login_id = None;
+        app.assistant.open_login = false;
+    }
+    fn clear_references(&mut self, app: &mut WordApp) {
+        self.shutdown();
+        Self::clear_auth(app);
+        app.assistant.enabled = false;
+        app.assistant.signed_in = None;
+        app.assistant.thread = None;
+        app.assistant.turn = None;
+        app.assistant.pending = false;
+        app.assistant.recent.clear();
+        app.assistant.messages.clear();
+        app.assistant.composer.clear();
+        app.assistant.resume.clear();
+        app.assistant.last_prompt.clear();
+        app.assistant.activity.clear();
+        app.assistant.status = "Thread references cleared. Codex is disabled.".into();
+        if let Some(requests) = app.session.codex_requests().as_array() {
+            for request in requests {
+                if request["state"] == "pending"
+                    && let Some(id) = request["request"].as_str()
+                {
+                    let _ = app.session.deny_codex(id);
+                }
+            }
+        }
+    }
     pub fn shutdown(&mut self) {
         self.profile.revoke();
         self.thread = None;
@@ -102,6 +158,7 @@ impl Host {
     }
     fn start(&mut self, app: &mut WordApp) -> Result<(), String> {
         self.shutdown();
+        Self::clear_auth(app);
         app.assistant.enabled = false;
         app.assistant.thread = None;
         app.assistant.pending = false;
@@ -127,11 +184,59 @@ impl Host {
         Ok(())
     }
     pub fn tick(&mut self, app: &mut WordApp, ctx: &egui::Context) {
+        if !self.loaded {
+            self.loaded = true;
+            if self.settings_enabled
+                && let Some(root) = &self.root
+            {
+                crate::codex_settings::load(root, &mut app.assistant);
+            }
+            self.settings_value = Some(crate::codex_settings::value(&app.assistant));
+        }
         while let Some(action) = app.assistant.actions.pop_front() {
+            let auth_action = matches!(action, Action::SignIn | Action::CancelSignIn | Action::SignOut);
             let result = match action {
+                Action::SignIn => {
+                    let started = if self.runtime.is_none() { self.start(app) } else { Ok(()) };
+                    started.and_then(|()| {
+                        self.login_cancelled = false;
+                        app.assistant.auth_pending = true;
+                        app.assistant.open_login = true;
+                        app.assistant.login_url = None;
+                        self.send(Request::Login)
+                    })
+                }
+                Action::CancelSignIn => {
+                    self.login_cancelled = true;
+                    let result =
+                        if let Some(login_id) = app.assistant.login_id.clone() { self.send(Request::CancelLogin { login_id }) } else { Ok(()) };
+                    Self::clear_auth(app);
+                    app.assistant.auth_pending = result.is_ok() && self.runtime.is_some();
+                    app.assistant.status = "Cancelling sign-in…".into();
+                    result
+                }
+                Action::SignOut => {
+                    if self.turn.is_some() {
+                        let _ = self.stop(app);
+                    }
+                    self.profile.revoke();
+                    self.thread = None;
+                    self.turn = None;
+                    self.starting_turn = false;
+                    app.assistant.thread = None;
+                    app.assistant.turn = None;
+                    app.assistant.pending = false;
+                    Self::clear_auth(app);
+                    self.send(Request::Logout)
+                }
+                Action::ClearReferences => {
+                    self.clear_references(app);
+                    Ok(())
+                }
                 Action::Connect => self.start(app),
                 Action::Disconnect => {
                     self.shutdown();
+                    Self::clear_auth(app);
                     app.assistant.enabled = false;
                     app.assistant.thread = None;
                     app.assistant.pending = false;
@@ -165,6 +270,9 @@ impl Host {
                 }
             };
             if let Err(error) = result {
+                if auth_action {
+                    Self::clear_auth(app);
+                }
                 app.assistant.status = error.clone();
                 app.assistant.error = Some(error);
                 app.assistant.pending = self.turn.is_some() || self.starting_turn;
@@ -184,6 +292,7 @@ impl Host {
             Some(_) => "Shared context is stale. Share again to include your latest edits.".into(),
             None => "Document sharing is off.".into(),
         };
+        self.persist(app);
         if self.runtime.is_some() {
             ctx.request_repaint_after(Duration::from_millis(33));
         }
@@ -196,8 +305,67 @@ impl Host {
                     app.assistant.status = error;
                 }
             }
+            Event::Response { request: Request::Login, result, .. } => {
+                let id = result.get("loginId").and_then(|v| v.as_str()).filter(|s| !s.is_empty() && s.len() <= 128);
+                let url = result
+                    .get("authUrl")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| s.starts_with("https://auth.openai.com/") && s.len() <= 8192 && !s.chars().any(char::is_control));
+                if self.login_cancelled {
+                    if let Some(login_id) = id {
+                        let _ = self.send(Request::CancelLogin { login_id: login_id.into() });
+                    }
+                    Self::clear_auth(app);
+                    app.assistant.auth_pending = id.is_some() && self.runtime.is_some();
+                } else if let (Some(id), Some(url), Some("chatgpt")) = (id, url, result.get("type").and_then(|v| v.as_str())) {
+                    app.assistant.login_id = Some(id.into());
+                    app.assistant.login_url = Some(url.into());
+                    app.assistant.status = "Complete secure sign-in in your browser.".into();
+                } else {
+                    Self::clear_auth(app);
+                    app.assistant.error = Some("Codex returned an unsupported sign-in response.".into());
+                }
+            }
+            Event::Response { request: Request::CancelLogin { .. }, .. } => {
+                Self::clear_auth(app);
+                app.assistant.status = "Sign-in cancelled.".into();
+            }
+            Event::Response { request: Request::Logout, .. } => {
+                Self::clear_auth(app);
+                app.assistant.signed_in = Some(false);
+                app.assistant.status = "Signed out of WordCraft's Codex profile.".into();
+            }
+            Event::Notification { kind: Notice::LoginCompleted, params } => {
+                let matches = app.assistant.login_id.is_some() && params.get("loginId").and_then(|v| v.as_str()) == app.assistant.login_id.as_deref();
+                if matches {
+                    Self::clear_auth(app);
+                    if params.get("success").and_then(|v| v.as_bool()) == Some(true) {
+                        let _ = self.send(Request::Account);
+                    } else {
+                        app.assistant.status = "Sign-in did not complete. Try again.".into();
+                    }
+                }
+            }
+            Event::Notification { kind: Notice::AccountUpdated, params } => {
+                if params.get("authMode").is_some_and(|v| v.is_null()) {
+                    self.profile.revoke();
+                    app.assistant.signed_in = Some(false);
+                    app.assistant.status = "Your WordCraft Codex session needs sign-in.".into();
+                    if self.turn.is_some() {
+                        let _ = self.stop(app);
+                    }
+                } else {
+                    let _ = self.send(Request::Account);
+                }
+            }
             Event::Response { request: Request::Account, result, .. } => {
                 let signed_in = result.get("account").is_some_and(|a| !a.is_null());
+                if !signed_in {
+                    self.profile.revoke();
+                    if self.turn.is_some() {
+                        let _ = self.stop(app);
+                    }
+                }
                 app.assistant.signed_in = Some(signed_in);
                 app.assistant.status =
                     if signed_in { "Codex connected and signed in." } else { "Codex connected. Sign in to the WordCraft profile to continue." }
@@ -330,6 +498,9 @@ impl Host {
                 }
             }
             Event::Error(error) => {
+                if app.assistant.auth_pending {
+                    Self::clear_auth(app);
+                }
                 if self.turn.is_none() {
                     app.assistant.pending = false;
                     self.starting_turn = false;
@@ -339,6 +510,7 @@ impl Host {
             }
             Event::Stopped => {
                 self.shutdown();
+                Self::clear_auth(app);
                 app.assistant.enabled = false;
                 app.assistant.thread = None;
                 app.assistant.pending = false;
@@ -425,7 +597,7 @@ mod tests {
         app.assistant.enabled = true;
         app.assistant.remember_thread("thread".into());
         app.assistant.pending = true;
-        let mut host = Host { thread: Some("thread".into()), starting_turn: true, ..Default::default() };
+        let mut host = Host { root: None, thread: Some("thread".into()), starting_turn: true, ..Default::default() };
         host.begin_turn(&mut app, Some("turn"));
         (host, app)
     }
@@ -499,5 +671,60 @@ mod tests {
         app.execute("ui.assistantApprove", json!({"request":"thread:turn"})).unwrap();
         assert_eq!(app.session.doc.final_text(wordcraft_doc::StoryRef::Body), "Revised text\nHuman paragraph");
         assert!(!app.autosave && !app.session.autosave);
+    }
+    #[test]
+    fn codex_auth_events_cancel_expire_and_clear() {
+        let (mut host, mut app) = stream_host();
+        let login = |url: &str| Event::Response { id: 1, request: Request::Login, result: json!({"type":"chatgpt","loginId":"login","authUrl":url}) };
+        app.assistant.auth_pending = true;
+        host.event(&mut app, login("https://auth.openai.com.attacker.invalid/secret"));
+        assert!(!app.assistant.auth_pending && app.assistant.login_url.is_none());
+        app.assistant.auth_pending = true;
+        host.event(&mut app, login("https://auth.openai.com/authorize?synthetic"));
+        assert_eq!(app.assistant.login_id.as_deref(), Some("login"));
+        notice(&mut host, &mut app, Notice::LoginCompleted, json!({"loginId":"foreign","success":true}));
+        assert!(app.assistant.auth_pending);
+        notice(&mut host, &mut app, Notice::LoginCompleted, json!({"loginId":"login","success":false,"error":"SECRET"}));
+        assert!(!app.assistant.auth_pending && app.assistant.login_url.is_none());
+        assert!(!app.assistant.status.contains("SECRET"));
+        host.login_cancelled = true;
+        host.event(&mut app, login("https://auth.openai.com/authorize?synthetic"));
+        assert!(app.assistant.login_url.is_none());
+        app.execute("select.text", json!({"text":"Shared text"})).unwrap();
+        host.share(&app, Scope::Selection).unwrap();
+        notice(&mut host, &mut app, Notice::AccountUpdated, json!({"authMode":null}));
+        assert!(host.profile.context().is_none());
+        assert_eq!(app.assistant.signed_in, Some(false));
+        assert!(host.stop_requested);
+        app.assistant.composer = "SECRET".into();
+        app.assistant.push_message("You", "SECRET".into());
+        host.clear_references(&mut app);
+        assert!(app.assistant.recent.is_empty() && app.assistant.messages.is_empty() && app.assistant.composer.is_empty());
+        assert!(!app.assistant.enabled && !app.assistant.pending && host.thread.is_none());
+        assert_eq!(app.session.doc.final_text(wordcraft_doc::StoryRef::Body), "Shared text\nHuman paragraph");
+    }
+    #[test]
+    #[ignore = "requires installed Codex 0.162.1 and built WordCraft helper"]
+    fn codex_real_isolated_auth_start_cancel_logout() {
+        let temp = tempfile::tempdir().unwrap();
+        let bridge = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("wordcraft");
+        let mut host = Host { root: Some(temp.path().join("profile")), bridge: Some(bridge), settings_enabled: true, ..Default::default() };
+        let mut app = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text("Synthetic auth check")), Default::default());
+        app.execute("ui.assistantConnect", json!({"binary":"/opt/homebrew/bin/codex"})).unwrap();
+        until(&mut host, &mut app, |a| a.assistant.signed_in == Some(false));
+        app.execute("ui.assistantSignIn", json!({})).unwrap();
+        until(&mut host, &mut app, |a| a.assistant.login_url.is_some());
+        assert!(app.assistant.auth_pending);
+        app.execute("ui.assistantCancelSignIn", json!({})).unwrap();
+        until(&mut host, &mut app, |a| !a.assistant.auth_pending);
+        app.assistant.signed_in = None;
+        app.execute("ui.assistantSignOut", json!({})).unwrap();
+        until(&mut host, &mut app, |a| a.assistant.signed_in == Some(false));
+        host.shutdown();
+        host.settings_value = None;
+        host.persist(&mut app);
+        let settings = std::fs::read_to_string(temp.path().join("profile/assistant.json")).unwrap();
+        assert!(!settings.contains("authUrl") && !settings.contains("loginId") && !settings.contains("Synthetic auth"));
+        assert!(!temp.path().join("profile/home/history.jsonl").exists());
     }
 }

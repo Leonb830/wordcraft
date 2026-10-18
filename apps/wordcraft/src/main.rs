@@ -15,6 +15,7 @@ mod apple_events;
 mod clipboard;
 mod codex_bridge;
 mod codex_service;
+mod codex_settings;
 mod control_server;
 mod default_apps;
 mod file_dialogs;
@@ -81,6 +82,7 @@ impl eframe::App for App {
             {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 self.0.quit_requested = false;
+                self.4.persist(&mut self.0);
                 self.4.shutdown();
                 schedule_macos_terminate(&self.0, self.2.as_ref());
             }
@@ -98,6 +100,7 @@ impl eframe::App for App {
         self.3.show(frame);
     }
     fn on_exit(&mut self) {
+        self.4.persist(&mut self.0);
         self.4.shutdown();
         print::finish_pending_jobs();
         save_prefs(&self.0);

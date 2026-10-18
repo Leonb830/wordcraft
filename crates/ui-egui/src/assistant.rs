@@ -15,6 +15,10 @@ pub enum Action {
     Send(String),
     Stop,
     Retry,
+    SignIn,
+    CancelSignIn,
+    SignOut,
+    ClearReferences,
 }
 
 #[derive(Clone, Debug)]
@@ -26,6 +30,10 @@ pub struct Message {
 }
 
 pub struct State {
+    pub login_url: Option<String>,
+    pub login_id: Option<String>,
+    pub auth_pending: bool,
+    pub open_login: bool,
     pub turn: Option<String>,
     pub last_prompt: String,
     pub activity: String,
@@ -51,6 +59,10 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
+            login_url: None,
+            login_id: None,
+            auth_pending: false,
+            open_login: false,
             turn: None,
             last_prompt: String::new(),
             activity: String::new(),
@@ -262,13 +274,45 @@ pub fn connection(app: &mut WordApp, ctx: &egui::Context) {
         return;
     }
     let mut open = true;
-    egui::Window::new("Codex connection").open(&mut open).resizable(true).show(ctx, |ui| {
+    egui::Window::new("Codex connection").default_width(520.0).open(&mut open).resizable(true).show(ctx, |ui| {
         ui.label(&app.assistant.status);
+        ui.label("Sign in with ChatGPT in your browser. Credentials stay in WordCraft's separate Codex profile.");
+        ui.horizontal_wrapped(|ui| {
+            if ui.add_enabled(!cfg!(target_arch = "wasm32") && !app.assistant.auth_pending, egui::Button::new(tl!("Sign in with ChatGPT"))).clicked()
+            {
+                let _ = app.run("ui.assistantSignIn", json!({}));
+            }
+            if ui.add_enabled(app.assistant.auth_pending, egui::Button::new(tl!("Cancel sign-in"))).clicked() {
+                let _ = app.run("ui.assistantCancelSignIn", json!({}));
+            }
+            if ui.add_enabled(app.assistant.enabled, egui::Button::new(tl!("Sign out of WordCraft"))).clicked() {
+                let _ = app.run("ui.assistantSignOut", json!({}));
+            }
+        });
+        if let Some(url) = &app.assistant.login_url {
+            ui.hyperlink_to(tl!("Open secure sign-in page"), url);
+            if std::mem::take(&mut app.assistant.open_login) {
+                ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+            }
+        }
+        if app.assistant.auth_pending {
+            ui.label(tl!("Complete sign-in in your browser, then return here."));
+        }
+        ui.separator();
+        if ui.button(tl!("Clear thread references")).clicked() {
+            let _ = app.run("ui.assistantClearReferences", json!({}));
+        }
+        ui.add(
+            egui::Label::new(tl!(
+                "Clearing removes WordCraft's conversation list and disconnects. Codex conversation data remains in its own profile."
+            ))
+            .wrap(),
+        );
         ui.label("Installed Codex 0.162.1 executable (leave blank to detect)");
         ui.text_edit_singleline(&mut app.assistant.binary);
         ui.label("WordCraft uses its own Codex profile. Document sharing is off until you choose a scope.");
         ui.add_enabled_ui(!cfg!(target_arch = "wasm32"), |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if ui.button("Start / restart Codex").clicked() {
                     let _ = app.run("ui.assistantConnect", json!({}));
                 }
@@ -441,6 +485,31 @@ mod tests {
         );
         h.run_steps(3);
         h
+    }
+    #[test]
+    fn codex_auth_connection_controls_and_snapshot() {
+        let mut app = conversation_app();
+        app.assistant.connection_open = true;
+        app.assistant.status = "Codex connected. Sign in to continue.".into();
+        let mut h = Harness::builder().with_size(egui::vec2(800.0, 650.0)).build_ui_state(|ui, app: &mut WordApp| connection(app, ui.ctx()), app);
+        h.run_steps(3);
+        if let Ok(path) = std::env::var("WORDCRAFT_CODEX_AUTH_SHOT") {
+            h.render().unwrap().save(path).unwrap();
+        }
+        h.get_by_label("Sign in with ChatGPT").click();
+        h.run_steps(3);
+        assert!(h.state().assistant.auth_pending);
+        assert_eq!(h.state_mut().assistant.actions.pop_front(), Some(Action::SignIn));
+        assert!(h.state_mut().execute("ui.assistantSignIn", json!({})).is_err());
+        h.get_by_label("Cancel sign-in").click();
+        h.run_steps(3);
+        assert_eq!(h.state_mut().assistant.actions.pop_front(), Some(Action::CancelSignIn));
+        h.get_by_label("Sign out of WordCraft").click();
+        h.run_steps(3);
+        assert_eq!(h.state_mut().assistant.actions.pop_front(), Some(Action::SignOut));
+        h.get_by_label("Clear thread references").click();
+        h.run_steps(3);
+        assert_eq!(h.state_mut().assistant.actions.pop_front(), Some(Action::ClearReferences));
     }
     #[test]
     fn codex_pane_composer_context_and_pending_gate() {

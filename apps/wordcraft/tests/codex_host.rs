@@ -193,3 +193,75 @@ fn native_slow_stream_repeated_turns_stop_and_retry() {
     control.execute("file.close", json!({"force":true}));
     wait(|| app.0.try_wait().unwrap().is_some());
 }
+
+#[test]
+#[ignore = "requires macOS window session and built wordcraft-codex-fixture"]
+fn native_preferences_restart_clear_and_private_logs() {
+    let temp = tempfile::tempdir().unwrap();
+    let fixture = std::path::Path::new(env!("CARGO_BIN_EXE_wordcraft")).with_file_name("wordcraft-codex-fixture");
+    let binary = temp.path().join("codex");
+    std::fs::copy(fixture, &binary).unwrap();
+    std::fs::write(temp.path().join("mode"), "slow").unwrap();
+    let profile = temp.path().join("profile");
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    for cycle in 0..3 {
+        let mut app = Owned(
+            Command::new(env!("CARGO_BIN_EXE_wordcraft"))
+                .args(["--sample", "--control", &port.to_string()])
+                .env("WORDCRAFT_PROFILE_DIR", &profile)
+                .env_remove("WORDCRAFT_NO_PREFS")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        let key_path = wordcraft_control_key::key_path(&profile, port);
+        wait(|| key_path.exists());
+        let writer = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        writer.set_read_timeout(Some(Duration::from_secs(40))).unwrap();
+        let mut control = Control { reader: BufReader::new(writer.try_clone().unwrap()), writer, key: std::fs::read_to_string(&key_path).unwrap() };
+        assert_eq!(control.status()["enabled"], false);
+        assert_eq!(control.status()["messageCount"], 0);
+        assert_eq!(control.status()["sharing"], "Document sharing is off.");
+        if cycle == 0 {
+            control.execute("ui.assistant", json!({"open":true}));
+            control.execute("ui.assistantConnect", json!({"binary":binary}));
+            wait(|| control.status()["signedIn"] == false);
+            control.execute("ui.assistantNew", json!({}));
+            wait(|| control.status()["thread"].is_string());
+            control.execute("text.insert", json!({"text":"PRIVATE_DOCUMENT_CANARY_T8"}));
+            control.execute("ui.assistantShareDocument", json!({}));
+            control.execute("ui.assistantSend", json!({"text":"PRIVATE_PROMPT_CANARY_T8"}));
+            wait(|| control.status()["messageCount"] == 2 && control.status()["pending"] == false);
+        } else if cycle == 1 {
+            assert_eq!(control.status()["recentCount"], 1);
+            control.execute("ui.assistantConnect", json!({}));
+            wait(|| control.status()["signedIn"] == false);
+            control.execute("ui.assistantResume", json!({"thread":"fixture-thread"}));
+            wait(|| control.status()["status"] == "Conversation ready.");
+            control.execute("ui.assistantClearReferences", json!({}));
+            wait(|| control.status()["enabled"] == false);
+            assert_eq!(control.status()["recentCount"], 0);
+            control.execute("ui.assistantSignIn", json!({}));
+            wait(|| control.status()["authPending"] == false);
+            assert!(!control.status().to_string().contains("SENSITIVE_SYNTHETIC_ERROR"));
+        } else {
+            assert_eq!(control.status()["recentCount"], 0);
+        }
+        control.execute("file.close", json!({"force":true}));
+        wait(|| app.0.try_wait().unwrap().is_some());
+        wait(|| !key_path.exists());
+    }
+    let settings = std::fs::read_to_string(profile.join("codex/assistant.json")).unwrap();
+    assert!(!settings.contains("CANARY_T8") && !settings.contains("authUrl") && !settings.contains("loginId"));
+    let logs = std::fs::read_dir(profile.join("logs")).unwrap().collect::<Result<Vec<_>, _>>().unwrap();
+    assert!(!logs.is_empty(), "privacy check must inspect actual enabled logs");
+    for entry in logs {
+        if entry.file_type().unwrap().is_file() {
+            let log = std::fs::read_to_string(entry.path()).unwrap();
+            assert!(!log.contains("CANARY_T8") && !log.contains("authUrl") && !log.contains("loginId") && !log.contains("SENSITIVE_SYNTHETIC_ERROR"));
+        }
+    }
+}

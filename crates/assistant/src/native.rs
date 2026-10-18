@@ -168,11 +168,19 @@ fn prepare(launch: &Launch) -> Result<(), Error> {
     if std::env::var_os("CODEX_HOME").is_some_and(|home| launch.home.as_os_str() == home) {
         return Err(Error::Configuration);
     }
+    let globals = [std::env::var_os("CODEX_HOME").map(PathBuf::from), std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".codex"))];
+    let globals = globals.into_iter().flatten().filter_map(|p| std::fs::canonicalize(p).ok()).collect::<Vec<_>>();
+    for path in [&launch.home, &launch.cwd] {
+        let actual = path.ancestors().find_map(|p| std::fs::canonicalize(p).ok()).ok_or(Error::Configuration)?;
+        if globals.iter().any(|p| actual.starts_with(p)) {
+            return Err(Error::Configuration);
+        }
+    }
     std::fs::create_dir_all(&launch.home).map_err(|_| Error::Configuration)?;
     std::fs::create_dir_all(&launch.cwd).map_err(|_| Error::Configuration)?;
     let actual = std::fs::canonicalize(&launch.home).map_err(|_| Error::Configuration)?;
-    let global = std::env::var_os("CODEX_HOME").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".codex")));
-    if global.and_then(|p| std::fs::canonicalize(p).ok()).is_some_and(|p| p == actual)
+    let globals = [std::env::var_os("CODEX_HOME").map(PathBuf::from), std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".codex"))];
+    if globals.into_iter().flatten().filter_map(|p| std::fs::canonicalize(p).ok()).any(|p| actual.starts_with(p))
         || std::fs::symlink_metadata(launch.home.join("config.toml")).is_ok_and(|m| m.file_type().is_symlink())
     {
         return Err(Error::Configuration);
@@ -183,7 +191,7 @@ fn prepare(launch: &Launch) -> Result<(), Error> {
         std::fs::set_permissions(&launch.home, std::fs::Permissions::from_mode(0o700)).map_err(|_| Error::Configuration)?;
     }
     let mut config = String::from(
-        "approval_policy = \"on-request\"\nsandbox_mode = \"read-only\"\nweb_search = \"disabled\"\n[analytics]\nenabled = false\n[otel]\nlog_user_prompt = false\n",
+        "approval_policy = \"on-request\"\nsandbox_mode = \"read-only\"\nweb_search = \"disabled\"\ncli_auth_credentials_store = \"file\"\n[history]\npersistence = \"none\"\n[analytics]\nenabled = false\n[otel]\nlog_user_prompt = false\n",
     );
     config.push_str(include_str!("restricted-features.toml"));
     if let Some(bridge) = &launch.document_bridge {
@@ -203,7 +211,13 @@ fn run(launch: Launch, requests: Receiver<Input>, events: &SyncSender<Event>, st
             command.env(name, value);
         }
     }
-    command.env("CODEX_HOME", &launch.home).current_dir(&launch.cwd).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+    command
+        .env("RUST_LOG", "off")
+        .env("CODEX_HOME", &launch.home)
+        .current_dir(&launch.cwd)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
     let mut child = OwnedChild(command.spawn().map_err(|_| Error::MissingRuntime)?);
     let mut input = child.0.stdin.take().ok_or(Error::Protocol)?;
     let (outgoing, writes) = mpsc::sync_channel(QUEUE);
