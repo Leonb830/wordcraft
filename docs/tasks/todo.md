@@ -49,10 +49,10 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
   - [x] Add empty, loading, missing-runtime, and unsupported-target states.
   - **Checkpoint:** a user can start/resume a thread and send a prompt in-app.
 
-- [ ] **T7 — Add streaming, action cards, approvals, and stop** (5–8 h; depends on T4, T6)
-  - [ ] Render streamed response and tool progress.
-  - [ ] Add action preview/approval cards connected to T4's edit gate.
-  - [ ] Add stop, retry, disconnect, and recoverable error behavior.
+- [x] **T7 — Add streaming, action cards, approvals, and stop** (5–8 h; depends on T4, T6)
+  - [x] Render streamed response and tool progress.
+  - [x] Add action preview/approval cards connected to T4's edit gate.
+  - [x] Add stop, retry, disconnect, and recoverable error behavior.
   - **Checkpoint:** no UI or protocol event can bypass the write approval path.
 
 - [ ] **T8 — Add auth, thread references, settings, and privacy controls** (4–7 h; depends on T1, T5, T6)
@@ -180,3 +180,19 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 - Full WordApp and actual native screenshots inspected: pane controls and composer are readable and contained; the document remains alongside. The existing title bar and other panes are retained.
 - `cargo clippy -p wordcraft -p wordcraft-ui-egui --all-targets --no-deps -- -D warnings -A clippy::nonminimal_bool`: exit 0. `git diff --check`: exit 0.
 - Pre-commit `cargo xtask ci`: exit 1; fmt passes and the recorded baseline Clippy warnings still stop later stages. This is not full CI success.
+
+
+### T7 — complete (2026-10-18)
+
+- Added incremental response rendering, bounded messages, tool activity, stop/retry/disconnect and inline approval/review cards. Completion replaces partial text once; stale threads/turns, duplicate completion and late deltas cannot overwrite a new response. Composer, Stop and Retry remain in a fixed footer; the sharing indicator stays visible above the scrolling conversation.
+- The dedicated relay adds only `propose_selection`: one plain-text replacement of the entire originally shared selection within one paragraph per turn. It validates exact original text, document/revision, originating thread/turn and scope, then queues a preview. No protocol apply/approve/review/save command exists. Requests use thread:turn attribution. Persisted request IDs cannot be reused after reopening.
+- Explicit approval now pauses WordCraft's existing AutoSave in both UI and session, with visible notice. This closes the existing AutoSave path around the manual-save requirement; normal manual save and explicitly re-enabling AutoSave remain available.
+- `cargo test -p wordcraft-mcp --lib proposal_scope`: exit 0, 1 test passed (scope, immutable preview, replay, persisted ID and stale guards).
+- `cargo test -p wordcraft-engine --lib codex_`: exit 0, 8 request-safety/review tests passed.
+- `cargo test -p wordcraft --bin wordcraft codex_ -- --include-ignored`: exit 0, 3 tests passed, including event ordering, duplicate/late events, active-turn guards, foreign/stale tool requests, preview-only behavior, explicit approval, AutoSave pause and disconnect.
+- `cargo test -p wordcraft-ui-egui --lib codex_`: exit 0, 8 tests passed, covering streaming text, stop/retry, approval/deny/stale/review, composer and context controls.
+- `cargo test -p wordcraft-assistant --features test-support`: exit 0, 2 unit and 8 lifecycle/transport tests passed.
+- `cargo test -p wordcraft --test codex_bridge -- --ignored`: exit 0; installed Codex 0.162.1 + actual WordCraft helper relay a proposal into the pending review queue while the synthetic document remains unchanged. Read privacy and forbidden-tool tests remain passing.
+- `cargo test -p wordcraft --test codex_host -- --ignored --test-threads=1`: exit 0, 2 actual native-window checks passed (installed-runtime lifecycle/control/MCP plus synthetic slow streaming, repeated turns, stop/retry). After footer adjustment, `WORDCRAFT_CODEX_STREAM_SHOT=<outputs>/codex-stream.png cargo test -p wordcraft --test codex_host native_slow -- --ignored`: exit 0. Screenshot inspected with a longer conversation: fixed controls and scope remain visible. Slow inference is synthetic, not hosted inference.
+- `cargo clippy -p wordcraft -p wordcraft-ui-egui -p wordcraft-mcp -p wordcraft-assistant --all-targets --no-deps -- -D warnings -A clippy::nonminimal_bool`: exit 0 after removing a new needless-return warning. `git diff --check`: exit 0.
+- Pre-commit `cargo xtask ci`: exit 1; fmt passes, recorded upstream Clippy warnings still stop later stages. Full CI is still outstanding.

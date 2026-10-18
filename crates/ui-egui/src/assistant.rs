@@ -13,15 +13,22 @@ pub enum Action {
     NewThread,
     Resume(String),
     Send(String),
+    Stop,
+    Retry,
 }
 
 #[derive(Clone, Debug)]
 pub struct Message {
     pub role: &'static str,
+    pub id: Option<String>,
+    pub complete: bool,
     pub text: String,
 }
 
 pub struct State {
+    pub turn: Option<String>,
+    pub last_prompt: String,
+    pub activity: String,
     pub open: bool,
     pub composer: String,
     pub resume: String,
@@ -44,6 +51,9 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
+            turn: None,
+            last_prompt: String::new(),
+            activity: String::new(),
             open: false,
             composer: String::new(),
             resume: String::new(),
@@ -74,12 +84,44 @@ impl State {
         self.recent.insert(0, id.clone());
         self.recent.truncate(20);
         self.thread = Some(id);
+        self.turn = None;
+        self.last_prompt.clear();
+        self.activity.clear();
         self.messages.clear();
         self.pending = false;
     }
     pub fn push_message(&mut self, role: &'static str, text: String) {
-        self.messages.push(Message { role, text });
+        self.messages.push(Message { role, text, id: None, complete: true });
         while self.messages.len() > 100 || self.messages.iter().map(|m| m.text.len()).sum::<usize>() > 1024 * 1024 {
+            self.messages.remove(0);
+        }
+    }
+    pub fn stream(&mut self, item: &str, text: &str, completed: bool) {
+        if item.is_empty() || item.len() > 128 || text.len() > 256 * 1024 {
+            self.error = Some("The response exceeded the display limit. Stop and ask for a shorter response.".into());
+            return;
+        }
+        let key = format!("{}:{item}", self.turn.as_deref().unwrap_or(""));
+        if let Some(message) = self.messages.iter_mut().find(|m| m.id.as_deref() == Some(key.as_str())) {
+            if message.complete {
+                return;
+            }
+            if completed {
+                message.text = text.to_owned();
+                message.complete = true;
+            } else if message.text.len().saturating_add(text.len()) <= 256 * 1024 {
+                message.text.push_str(text);
+            } else {
+                self.error = Some("The response exceeded the display limit. Stop and ask for a shorter response.".into());
+            }
+        } else {
+            self.push_message("Codex", text.to_owned());
+            if let Some(message) = self.messages.last_mut() {
+                message.id = Some(key);
+                message.complete = completed;
+            }
+        }
+        while self.messages.iter().map(|m| m.text.len()).sum::<usize>() > 1024 * 1024 {
             self.messages.remove(0);
         }
     }
@@ -90,7 +132,49 @@ pub fn pane(app: &mut WordApp, ui: &mut egui::Ui) {
         let _ = app.run("ui.assistant", json!({"open":false}));
         return;
     }
-    egui::ScrollArea::vertical().id_salt("assistant_scroll").show(ui, |ui| {
+    ui.add(egui::Label::new(&app.assistant.sharing).wrap());
+    if !cfg!(target_arch = "wasm32") {
+        egui::Panel::bottom("assistant_composer_panel").exact_size(200.0).show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                if ui.add_enabled(app.assistant.pending, egui::Button::new(tl!("Stop response"))).clicked() {
+                    let _ = app.run("ui.assistantStop", json!({}));
+                }
+                if ui
+                    .add_enabled(
+                        !app.assistant.pending && !app.assistant.last_prompt.is_empty() && app.assistant.thread.is_some(),
+                        egui::Button::new(tl!("Retry message")),
+                    )
+                    .clicked()
+                {
+                    let _ = app.run("ui.assistantRetry", json!({}));
+                }
+                if ui.button(tl!("Disconnect")).clicked() {
+                    let _ = app.run("ui.assistantDisconnect", json!({}));
+                }
+            });
+            if !app.assistant.activity.is_empty() {
+                ui.add(egui::Label::new(&app.assistant.activity).wrap());
+            }
+            ui.separator();
+            ui.label(tl!("Message to Codex"));
+            let input = ui.add(
+                egui::TextEdit::multiline(&mut app.assistant.composer)
+                    .id_salt("assistant_composer")
+                    .hint_text(tl!("Message to Codex"))
+                    .desired_rows(3)
+                    .desired_width(f32::INFINITY)
+                    .char_limit(64 * 1024),
+            );
+            if std::mem::take(&mut app.assistant.focus_composer) {
+                input.request_focus();
+            }
+            let shortcut = input.has_focus() && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
+            if ui.add_enabled(app.assistant.can_send(), egui::Button::new(tl!("Send message"))).clicked() || shortcut && app.assistant.can_send() {
+                let _ = app.run("ui.assistantSend", json!({}));
+            }
+        });
+    }
+    egui::ScrollArea::vertical().id_salt("assistant_scroll").stick_to_bottom(true).show(ui, |ui| {
         ui.add(egui::Label::new(&app.assistant.status).wrap());
         if ui.button(tl!("Connection settings")).clicked() {
             let _ = app.run("ui.assistantConnection", json!({}));
@@ -127,7 +211,6 @@ pub fn pane(app: &mut WordApp, ui: &mut egui::Ui) {
         }
         ui.separator();
         ui.strong(tl!("Shared context"));
-        ui.add(egui::Label::new(&app.assistant.sharing).wrap());
         ui.add(
             egui::Label::new(tl!(
                 "Sharing lets Codex read this content. Changes require your approval. Previously sent content remains in the conversation."
@@ -160,26 +243,13 @@ pub fn pane(app: &mut WordApp, ui: &mut egui::Ui) {
                 ui.add(egui::Label::new(&message.text).wrap());
             });
         }
+        if app.session.codex_requests().as_array().is_some_and(|r| !r.is_empty()) {
+            ui.separator();
+            review_cards(app, ui);
+        }
         if app.assistant.pending {
             ui.spinner();
             ui.label(tl!("Waiting for Codex…"));
-        }
-        ui.separator();
-        ui.label(tl!("Message to Codex"));
-        let input = ui.add(
-            egui::TextEdit::multiline(&mut app.assistant.composer)
-                .id_salt("assistant_composer")
-                .hint_text(tl!("Message to Codex"))
-                .desired_rows(4)
-                .desired_width(f32::INFINITY)
-                .char_limit(64 * 1024),
-        );
-        if std::mem::take(&mut app.assistant.focus_composer) {
-            input.request_focus();
-        }
-        let shortcut = input.has_focus() && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
-        if ui.add_enabled(app.assistant.can_send(), egui::Button::new(tl!("Send message"))).clicked() || shortcut && app.assistant.can_send() {
-            let _ = app.run("ui.assistantSend", json!({}));
         }
         if let Some(error) = &app.assistant.error {
             ui.add(egui::Label::new(egui::RichText::new(error).color(ui.visuals().error_fg_color)).wrap());
@@ -231,7 +301,7 @@ pub fn show_review(app: &mut WordApp, ui: &mut egui::Ui) {
 }
 
 pub fn review_cards(app: &mut WordApp, ui: &mut egui::Ui) {
-    ui.add(egui::Label::new("Approve each proposal before it changes your document. Save remains manual.").wrap());
+    ui.add(egui::Label::new("Approve each proposal before it changes your document. Approval pauses AutoSave; save manually when ready.").wrap());
     if let Some(error) = &app.assistant.error {
         ui.colored_label(ui.visuals().error_fg_color, error);
     }
@@ -245,7 +315,7 @@ pub fn review_cards(app: &mut WordApp, ui: &mut egui::Ui) {
         let state = request.get("state").and_then(|v| v.as_str()).unwrap_or("");
         ui.push_id(id, |ui| {
             ui.group(|ui| {
-                ui.label(format!("Codex · {id} · {state}"));
+                ui.add(egui::Label::new(format!("Codex · {id} · {state}")).wrap());
                 ui.label(format!("Document revision {}", request["revision"]));
                 ui.label("Original text");
                 ui.add(egui::Label::new(request["before"].as_str().unwrap_or("")).wrap());
@@ -444,5 +514,26 @@ mod tests {
             h.step();
         }
         h.render().unwrap().save(path).unwrap();
+    }
+    #[test]
+    fn codex_stream_ui_stop_retry_and_approval_cards() {
+        let mut a = conversation_app();
+        a.assistant.turn = Some("turn".into());
+        a.assistant.last_prompt = "Explain".into();
+        a.assistant.pending = true;
+        a.assistant.stream("item", "First ", false);
+        let mut h = pane_harness(a, 360.0);
+        assert!(h.query_by_label("First ").is_some());
+        h.state_mut().assistant.stream("item", "second", false);
+        h.run_steps(3);
+        assert!(h.query_by_label("First second").is_some());
+        h.get_by_label("Stop response").click();
+        h.run_steps(3);
+        assert_eq!(h.state_mut().assistant.actions.pop_front(), Some(Action::Stop));
+        h.state_mut().assistant.pending = false;
+        h.run_steps(3);
+        h.get_by_label("Retry message").click();
+        h.run_steps(3);
+        assert_eq!(h.state_mut().assistant.actions.pop_front(), Some(Action::Retry));
     }
 }

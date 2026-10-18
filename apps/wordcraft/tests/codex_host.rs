@@ -140,3 +140,56 @@ fn native_runtime_restart_crash_shutdown_and_existing_mcp() {
         }
     }
 }
+
+#[test]
+#[ignore = "requires macOS window session and built wordcraft-codex-fixture"]
+fn native_slow_stream_repeated_turns_stop_and_retry() {
+    let temp = tempfile::tempdir().unwrap();
+    let fixture = std::path::Path::new(env!("CARGO_BIN_EXE_wordcraft")).with_file_name("wordcraft-codex-fixture");
+    let binary = temp.path().join("codex");
+    std::fs::copy(fixture, &binary).unwrap();
+    std::fs::write(temp.path().join("mode"), "slow").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let mut app = Owned(
+        Command::new(env!("CARGO_BIN_EXE_wordcraft"))
+            .args(["--sample", "--control", &port.to_string()])
+            .env("WORDCRAFT_PROFILE_DIR", temp.path().join("profile"))
+            .env("WORDCRAFT_NO_PREFS", "1")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    let key = wordcraft_control_key::key_path(&temp.path().join("profile"), port);
+    wait(|| key.exists());
+    let writer = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    writer.set_read_timeout(Some(Duration::from_secs(40))).unwrap();
+    let mut control = Control { reader: BufReader::new(writer.try_clone().unwrap()), writer, key: std::fs::read_to_string(key).unwrap() };
+    control.execute("ui.assistant", json!({"open":true}));
+    control.execute("ui.assistantConnect", json!({"binary":binary}));
+    wait(|| control.status()["signedIn"] == false);
+    control.execute("ui.assistantNew", json!({}));
+    wait(|| control.status()["thread"].is_string());
+    for count in [2, 4] {
+        control.execute("ui.assistantSend", json!({"text":"Synthetic slow response"}));
+        wait(|| control.status()["turn"].is_string());
+        wait(|| control.status()["messageCount"] == count);
+        assert_eq!(control.status()["pending"], true, "a partial response is visible before completion");
+        wait(|| control.status()["pending"] == false);
+    }
+    control.execute("ui.assistantSend", json!({"text":"Stop this synthetic response"}));
+    wait(|| control.status()["turn"].is_string());
+    control.execute("ui.assistantStop", json!({}));
+    wait(|| control.status()["pending"] == false);
+    assert_eq!(control.status()["sharing"], "Document sharing is off.");
+    control.execute("ui.assistantRetry", json!({}));
+    wait(|| control.status()["turn"].is_string());
+    wait(|| control.status()["pending"] == false);
+    if let Ok(path) = std::env::var("WORDCRAFT_CODEX_STREAM_SHOT") {
+        control.call("ui.screenshot", json!({"path":path}));
+    }
+    control.execute("file.close", json!({"force":true}));
+    wait(|| app.0.try_wait().unwrap().is_some());
+}

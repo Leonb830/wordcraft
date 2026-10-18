@@ -40,6 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         output.flush()?;
         Ok(())
     };
+    let mut turns = 0u64;
     for line in std::io::stdin().lock().lines() {
         let request: Value = serde_json::from_str(&line?)?;
         let method = request.get("method").and_then(Value::as_str).unwrap_or("");
@@ -84,11 +85,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "account/read" => send(&mut output, json!({"id":id,"result":{"account":null,"requiresOpenaiAuth":true}}))?,
             "thread/start" | "thread/resume" => send(&mut output, json!({"id":id,"result":{"thread":{"id":"fixture-thread"}}}))?,
             "turn/start" => {
-                send(&mut output, json!({"id":id,"result":{"turn":{"id":"fixture-turn"}}}))?;
+                turns = turns.saturating_add(1);
+                let turn = if turns == 1 { "fixture-turn".to_string() } else { format!("fixture-turn-{turns}") };
+                send(&mut output, json!({"id":id,"result":{"turn":{"id":turn}}}))?;
                 for delta in ["hello ", "world"] {
+                    if mode == "slow" {
+                        std::thread::sleep(std::time::Duration::from_millis(750));
+                    }
                     send(
                         &mut output,
-                        json!({"method":"item/agentMessage/delta","params":{"threadId":"fixture-thread","turnId":"fixture-turn","itemId":"fixture-item","delta":delta}}),
+                        json!({"method":"item/agentMessage/delta","params":{"threadId":"fixture-thread","turnId":turn,"itemId":"fixture-item","delta":delta}}),
+                    )?;
+                }
+                if mode == "slow" {
+                    std::thread::sleep(std::time::Duration::from_millis(750));
+                    send(
+                        &mut output,
+                        json!({"method":"turn/completed","params":{"threadId":"fixture-thread","turn":{"id":turn,"status":"completed"}}}),
                     )?;
                 }
             }
@@ -96,7 +109,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 send(&mut output, json!({"id":id,"result":{}}))?;
                 send(
                     &mut output,
-                    json!({"method":"turn/completed","params":{"threadId":"fixture-thread","turn":{"id":"fixture-turn","status":"interrupted"}}}),
+                    json!({"method":"turn/completed","params":{"threadId":"fixture-thread","turn":{"id":request.pointer("/params/turnId"),"status":"interrupted"}}}),
                 )?;
             }
             _ => send(&mut output, json!({"id":id,"error":{"code":-32601,"message":"SENSITIVE_SYNTHETIC_ERROR"}}))?,

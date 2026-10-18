@@ -120,3 +120,18 @@ Unknown servers and tools are declined. The ordinary control server and CLI MCP
 remain independently available to external agents. The helper is a separate
 process so the assistant runtime never gains access to the editor's unrestricted
 command dispatcher. Write proposals will be added only through the T4 gate in T7.
+
+
+## T7 proposal scope and manual save (2026-10-18)
+
+The relay now additionally exposes `propose_selection`. It only queues one preview
+per turn for the exact originally shared selection in one paragraph. The host
+checks originating thread/turn and the profile checks consent, document identity,
+revision and exact original text. The engine adds object/protection/revision guards.
+Explicit UI approval is the sole application path; there is no approval tool.
+
+Approval pauses existing AutoSave for the session. This is necessary because an
+already enabled AutoSave could otherwise persist an approved edit on the next UI
+tick despite the integration's manual-save promise. The card explains the pause.
+The user can save normally or explicitly turn AutoSave back on. No other existing
+integration or save command is removed.

@@ -6,7 +6,7 @@ use wordcraft_assistant::{
     native::{DocumentBridge, Launch, Runtime},
 };
 use wordcraft_engine::Session;
-use wordcraft_mcp::codex_profile::{CodexProfile, Scope, SharedContext};
+use wordcraft_mcp::codex_profile::{CodexProfile, PROPOSAL_TOOL, Scope, SharedContext};
 fn next(runtime: &mut Runtime) -> Event {
     let deadline = Instant::now() + Duration::from_secs(40);
     loop {
@@ -53,15 +53,25 @@ fn installed_runtime_document_relay_uses_only_private_stdio() {
     profile.share(context);
     for (tool, args, expected) in [
         ("read_context", args.clone(), "Shared text"),
+        (
+            PROPOSAL_TOOL,
+            json!({"documentId":args["documentId"],"revision":args["revision"],"original":"Shared text","replacement":"Proposed text"}),
+            "awaiting_user_approval",
+        ),
         ("file.save", json!({}), "allowlist"),
         ("read_context", json!({"documentId":0,"revision":0}), "does not match"),
     ] {
         runtime.send(Request::ProbeDocument { thread_id: thread.clone(), tool: tool.into(), arguments: args }).unwrap();
         let result = loop {
             match next(&mut runtime) {
-                Event::DocumentRequest { id, thread: requested, tool, arguments } => {
+                Event::DocumentRequest { id, thread: requested, tool, arguments, .. } => {
                     assert_eq!(requested, thread);
-                    runtime.document_reply(id, profile.call(&session, &tool, &arguments).to_value()).unwrap();
+                    let result = if tool == PROPOSAL_TOOL {
+                        profile.propose(&mut session, &thread, "probe-request", &arguments)
+                    } else {
+                        profile.call(&session, &tool, &arguments)
+                    };
+                    runtime.document_reply(id, result.to_value()).unwrap();
                 }
                 Event::Response { request: Request::ProbeDocument { .. }, result, .. } => break result,
                 Event::Error(e) => panic!("{e}"),
@@ -72,6 +82,8 @@ fn installed_runtime_document_relay_uses_only_private_stdio() {
         assert!(text.contains(expected), "expected {expected}, result shape keys {:?}", result.as_object().map(|o| o.keys().collect::<Vec<_>>()));
         assert!(!text.contains("Private text"));
     }
+    assert_eq!(session.doc.final_text(wordcraft_doc::StoryRef::Body), "Shared text\nPrivate text");
+    assert_eq!(session.codex_requests()[0]["state"], "pending");
     drop(runtime);
     // The temporary profile remains separate; no global settings or credential copying.
     let config = std::fs::read_to_string(temp.path().join("home/config.toml")).unwrap();

@@ -1288,6 +1288,21 @@ impl WordApp {
                 self.assistant.focus_composer = self.assistant.open;
                 json!({"open":self.assistant.open})
             }
+            "ui.assistantStop" | "ui.assistantRetry" => {
+                if cfg!(target_arch = "wasm32") || !self.assistant.enabled || self.assistant.actions.len() >= 32 {
+                    return Some(Err("Codex is unavailable.".into()));
+                }
+                if id == "ui.assistantStop" {
+                    self.assistant.actions.push_back(assistant::Action::Stop);
+                } else {
+                    if self.assistant.pending || self.assistant.last_prompt.is_empty() || self.assistant.thread.is_none() {
+                        return Some(Err("No message is ready to retry.".into()));
+                    }
+                    self.assistant.pending = true;
+                    self.assistant.actions.push_back(assistant::Action::Retry);
+                }
+                json!({"queued":true})
+            }
             "ui.assistantNew" | "ui.assistantResume" | "ui.assistantSend" => {
                 if cfg!(target_arch = "wasm32") || !self.assistant.enabled {
                     return Some(Err("Start Codex in the desktop app first.".into()));
@@ -1337,7 +1352,7 @@ impl WordApp {
                 json!({"queued":true})
             }
             "ui.assistantStatus" => {
-                json!({"enabled":self.assistant.enabled,"status":self.assistant.status,"signedIn":self.assistant.signed_in,"thread":self.assistant.thread,"pending":self.assistant.pending,"sharing":self.assistant.sharing})
+                json!({"enabled":self.assistant.enabled,"status":self.assistant.status,"signedIn":self.assistant.signed_in,"thread":self.assistant.thread,"pending":self.assistant.pending,"sharing":self.assistant.sharing,"activity":self.assistant.activity,"turn":self.assistant.turn,"messageCount":self.assistant.messages.len()})
             }
             "ui.assistantConnection" => {
                 self.assistant.connection_open = true;
@@ -1370,7 +1385,12 @@ impl WordApp {
                 json!({"open":self.assistant.review_open})
             }
             "ui.assistantApprove" => {
-                return Some(self.session.approve_codex(s("request").unwrap_or("")).map(|()| json!({"approved":true})).map_err(|e| e.to_string()));
+                let result = self.session.approve_codex(s("request").unwrap_or(""));
+                if result.is_ok() {
+                    self.autosave = false;
+                    self.session.autosave = false;
+                }
+                return Some(result.map(|()| json!({"approved":true,"autoSavePaused":true})).map_err(|e| e.to_string()));
             }
             "ui.assistantDeny" => {
                 return Some(self.session.deny_codex(s("request").unwrap_or("")).map(|()| json!({"denied":true})).map_err(|e| e.to_string()));

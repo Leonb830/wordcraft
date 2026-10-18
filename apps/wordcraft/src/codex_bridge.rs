@@ -1,9 +1,9 @@
-//! Dedicated read-only MCP relay. Data is supplied by the owning UI Session via stable
+//! Dedicated document MCP relay. Data is supplied by the owning UI Session via stable
 //! app-server elicitation, so no socket, context file, control key, or broad Backend is needed.
 use serde_json::{Value, json};
 use std::io::{BufReader, Write};
 use wordcraft_assistant::native::read_message;
-use wordcraft_mcp::codex_profile::{READ_TOOLS, tool_definitions};
+use wordcraft_mcp::codex_profile::{PROPOSAL_TOOL, READ_TOOLS, assistant_tool_definitions};
 use wordcraft_mcp::tools::ToolResult;
 fn send(output: &mut impl Write, value: Value) -> Result<(), Box<dyn std::error::Error>> {
     serde_json::to_writer(&mut *output, &value)?;
@@ -33,13 +33,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 json!({"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"wordcraft-document","version":env!("CARGO_PKG_VERSION")}})
             }
             "ping" => json!({}),
-            "tools/list" if initialized => json!({"tools":tool_definitions()}),
+            "tools/list" if initialized => json!({"tools":assistant_tool_definitions()}),
             "resources/list" if initialized => json!({"resources":[]}),
             "resources/templates/list" if initialized => json!({"resourceTemplates":[]}),
             "tools/call" if initialized => {
                 let params = message.get("params").unwrap_or(&Value::Null);
                 let name = params.get("name").and_then(Value::as_str).unwrap_or("");
-                if !READ_TOOLS.contains(&name) {
+                if !READ_TOOLS.contains(&name) && name != PROPOSAL_TOOL {
                     ToolResult::error("Tool is not on the WordCraft Codex allowlist.").to_value()
                 } else {
                     let elicitation = format!("wordcraft-{next}");

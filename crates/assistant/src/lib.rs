@@ -113,7 +113,7 @@ impl Notice {
 #[derive(Debug)]
 pub enum Event {
     Ready,
-    DocumentRequest { id: Value, thread: String, tool: String, arguments: Value },
+    DocumentRequest { id: Value, thread: String, turn: Option<String>, tool: String, arguments: Value },
     Response { id: u64, request: Request, result: Value },
     Notification { kind: Notice, params: Value },
     Error(Error),

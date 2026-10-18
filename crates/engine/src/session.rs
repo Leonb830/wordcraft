@@ -1388,7 +1388,12 @@ impl Session {
         text: &str,
     ) -> Result<(), CmdError> {
         let valid_id = |id: &str| !id.is_empty() && id.len() <= 128 && id.bytes().all(|c| c.is_ascii_alphanumeric() || b"-_.:".contains(&c));
-        if !valid_id(thread) || !valid_id(request) || self.codex_requests.len() >= 100 || self.codex_requests.iter().any(|r| r.request == request) {
+        if !valid_id(thread)
+            || !valid_id(request)
+            || self.codex_requests.len() >= 100
+            || self.codex_requests.iter().any(|r| r.request == request)
+            || self.doc.custom_prop(&format!("WordCraft.Codex.Request.{request}")).is_some()
+        {
             return Err(CmdError::Params("Invalid, duplicate, or excessive Codex request.".into()));
         }
         if document != self.document_id() || revision != self.rev() {

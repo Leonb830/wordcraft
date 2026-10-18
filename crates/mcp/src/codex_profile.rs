@@ -6,6 +6,7 @@ use wordcraft_doc::StoryRef;
 use wordcraft_engine::{Selection, Session};
 
 pub const MAX_CONTEXT: usize = 256 * 1024;
+pub const PROPOSAL_TOOL: &str = "propose_selection";
 pub const READ_TOOLS: &[&str] = &["context_status", "read_context", "read_selection", "find_text", "inspect_formatting"];
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Scope {
@@ -125,6 +126,31 @@ impl CodexProfile {
         };
         ToolResult::json(&payload)
     }
+    /// Creates a preview only. The protocol cannot approve, apply, accept, reject or save it.
+    pub fn propose(&self, session: &mut Session, thread: &str, request: &str, args: &Value) -> ToolResult {
+        let Some(context) = &self.shared else { return ToolResult::error("Share a selection before proposing an edit.") };
+        if !context.is_current(session)
+            || args.get("documentId").and_then(Value::as_u64) != Some(context.document_id)
+            || args.get("revision").and_then(Value::as_u64) != Some(context.revision)
+        {
+            return ToolResult::error("Document context changed; ask the user to share again.");
+        }
+        if context.selection.is_collapsed() || context.selected.is_empty() {
+            return ToolResult::error("Select text within one paragraph and share it before proposing an edit.");
+        }
+        if args.get("original").and_then(Value::as_str) != Some(context.selected.as_str()) {
+            return ToolResult::error("The original text must exactly match the shared selection.");
+        }
+        let Some(text) = args.get("replacement").and_then(Value::as_str) else { return ToolResult::error("Provide replacement text.") };
+        match session.propose_codex(thread, request, context.document_id, context.revision, context.selection.clone(), text) {
+            Ok(()) => ToolResult::json(
+                &json!({"request":request,"status":"awaiting_user_approval","applied":false,"message":"The user must approve the preview in WordCraft. No document text has changed."}),
+            ),
+            Err(_) => ToolResult::error(
+                "The proposal cannot be queued. Use one plain-text edit to the shared selection per turn; avoid protected text, objects, existing revisions and stale context.",
+            ),
+        }
+    }
     /// Called on the owning Session thread. No arbitrary backend dispatch or resource reads.
     pub fn handle(&mut self, session: &Session, message: Value) -> Option<Value> {
         let id = message.get("id").cloned();
@@ -169,6 +195,15 @@ pub fn tool_definitions() -> Value {
         };
         json!({"name":name,"description":description,"inputSchema":{"type":"object","properties":properties,"required":required,"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":false}})
     }).collect())
+}
+
+/// Native assistant relay adds one preview tool to the read-only profile. There is no apply tool.
+pub fn assistant_tool_definitions() -> Value {
+    let mut tools = tool_definitions().as_array().cloned().unwrap_or_default();
+    tools.push(json!({"name":PROPOSAL_TOOL,"description":"Propose one plain-text replacement of the entire originally shared selection, within one paragraph. Read read_selection first. This only queues a preview; the user must approve in WordCraft. Never claim it is applied or saved. One proposal per turn.",
+        "inputSchema":{"type":"object","properties":{"documentId":{"type":"integer"},"revision":{"type":"integer"},"original":{"type":"string","maxLength":65536},"replacement":{"type":"string","maxLength":65536}},"required":["documentId","revision","original","replacement"],"additionalProperties":false},
+        "annotations":{"readOnlyHint":false,"destructiveHint":false,"openWorldHint":false}}));
+    Value::Array(tools)
 }
 
 #[cfg(test)]
@@ -268,5 +303,25 @@ mod tests {
         assert!(profile.call(&session, "find_text", &args).is_error);
         let large = Session::new(wordcraft_doc::Document::from_text(&"x".repeat(MAX_CONTEXT + 1)));
         assert!(SharedContext::capture(&large, Scope::Document, true).is_err());
+    }
+    #[test]
+    fn proposal_scope_preview_replay_and_staleness() {
+        let (mut session, profile, mut args) = shared();
+        args["original"] = json!("PRIVATE OUTSIDE SELECTION");
+        args["replacement"] = json!("replacement");
+        assert!(profile.propose(&mut session, "thread", "request", &args).is_error);
+        args["original"] = json!("PUBLIC");
+        let original = session.doc.clone();
+        assert!(!profile.propose(&mut session, "thread", "request", &args).is_error);
+        assert_eq!(session.doc, original, "proposing cannot mutate");
+        assert!(profile.propose(&mut session, "thread", "request", &args).is_error);
+        session.run("text.insert", &json!({"text":"human"})).unwrap();
+        assert!(profile.propose(&mut session, "thread", "next", &args).is_error);
+        assert!(profile.call(&session, "ui.assistantApprove", &args).is_error);
+        let (mut session, profile, mut args) = shared();
+        args["original"] = json!("PUBLIC");
+        args["replacement"] = json!("revision");
+        session.doc.set_custom_prop("WordCraft.Codex.Request.saved-request", "{}");
+        assert!(profile.propose(&mut session, "thread", "saved-request", &args).is_error, "saved request IDs cannot be reused after reopening");
     }
 }

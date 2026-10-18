@@ -305,6 +305,7 @@ fn pump(
                             Event::DocumentRequest {
                                 id: id.clone(),
                                 thread: thread.into(),
+                                turn: params.get("turnId").and_then(Value::as_str).filter(|s| s.len() <= 128).map(str::to_owned),
                                 tool: tool.into(),
                                 arguments: call.get("arguments").cloned().unwrap_or(Value::Null),
                             },

@@ -129,7 +129,7 @@ fn only_the_dedicated_document_relay_can_request_host_data() {
         let mut runtime = Runtime::start(launch).unwrap();
         assert!(matches!(event(&mut runtime), Event::Ready));
         if mode == "document" {
-            let Event::DocumentRequest { id, thread, tool, arguments } = event(&mut runtime) else { panic!("expected document request") };
+            let Event::DocumentRequest { id, thread, tool, arguments, .. } = event(&mut runtime) else { panic!("expected document request") };
             assert_eq!(thread, "fixture-thread");
             assert_eq!(tool, "read_context");
             assert_eq!(arguments["revision"], 1);
