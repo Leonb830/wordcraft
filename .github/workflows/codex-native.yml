@@ -1,11 +1,11 @@
 name: Codex native qualification
 on:
-  push:
-    branches: [codex/wordcraft-vnext]
-    paths:
-      - .github/workflows/codex-native.yml
-      - apps/wordcraft/tests/codex_platform.rs
   workflow_dispatch:
+    inputs:
+      targets:
+        description: 'Optional JSON matrix include list (empty runs all six targets)'
+        required: false
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -13,19 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-15
-            target: aarch64-apple-darwin
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-          - os: ubuntu-24.04
-            target: x86_64-unknown-linux-musl
-          - os: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-musl
-          - os: windows-2025
-            target: x86_64-pc-windows-msvc.exe
-          - os: windows-11-arm
-            target: aarch64-pc-windows-msvc.exe
+        include: ${{ fromJSON(inputs.targets || '[{"os":"macos-15","target":"aarch64-apple-darwin"},{"os":"macos-15-intel","target":"x86_64-apple-darwin"},{"os":"ubuntu-24.04","target":"x86_64-unknown-linux-musl"},{"os":"ubuntu-24.04-arm","target":"aarch64-unknown-linux-musl"},{"os":"windows-2025","target":"x86_64-pc-windows-msvc.exe"},{"os":"windows-11-arm","target":"aarch64-pc-windows-msvc.exe"}]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
@@ -42,11 +30,15 @@ jobs:
       - name: Install qualified test runtime
         shell: bash
         run: |
-          mkdir -p "$RUNNER_TEMP/wordcraft-codex"
-          curl --fail --location --retry 3 "https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-${{ matrix.target }}.tar.gz" -o "$RUNNER_TEMP/codex.tar.gz"
-          tar -xzf "$RUNNER_TEMP/codex.tar.gz" -C "$RUNNER_TEMP/wordcraft-codex"
-          binary="$RUNNER_TEMP/wordcraft-codex/codex-${{ matrix.target }}"
+          runtime_temp="$RUNNER_TEMP"
+          if [ "$RUNNER_OS" = Windows ]; then runtime_temp="$(cygpath -u "$RUNNER_TEMP")"; fi
+          cd "$runtime_temp"
+          mkdir -p wordcraft-codex
+          curl --fail --location --retry 3 "https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-${{ matrix.target }}.tar.gz" -o codex.tar.gz
+          tar -xzf codex.tar.gz -C wordcraft-codex
+          binary="$runtime_temp/wordcraft-codex/codex-${{ matrix.target }}"
           "$binary" --version
+          if [ "$RUNNER_OS" = Windows ]; then binary="$(cygpath -w "$binary")"; fi
           echo "WORDCRAFT_CODEX_BINARY=$binary" >> "$GITHUB_ENV"
       - name: Lifecycle and preference checks
         run: |

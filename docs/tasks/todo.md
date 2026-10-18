@@ -209,3 +209,14 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 - A native WordCraft window is open with a separate task-owned profile for the requested live browser sign-in. User completion is pending. T8 remains unchecked; T9–T11 have not started.
 
 - User completed browser sign-in in the separate WordCraft profile. Native control status confirms signedIn=true. Hosted turn returned the exact requested synthetic sentence; native screenshot `codex-live-auth.png` inspected. Disabled/restarted the real runtime, then resumed the same persisted thread: two messages restored, signedIn=true, sharing off. No credentials were read or copied. T8 is now complete; the earlier pending note is superseded.
+
+### T9 — native qualification in progress (2026-10-18)
+
+- Installed-runtime distribution remains the chosen strategy. Connection settings now links to the exact release, explains extraction/full executable path and says WordCraft never installs/upgrades it. Unsupported OS/CPU targets retain editing with an unavailable message. Flatpak retains its existing sandbox and explains why a native package/AppImage is needed for Codex.
+- `WORDCRAFT_CODEX_BINARY=/opt/homebrew/bin/codex cargo test -p wordcraft --test codex_platform -- --ignored`: exit 0, actual macOS arm64 window/runtime/thread/sharing/edit/disconnect/close smoke passed.
+- `cargo test -p wordcraft-ui-egui --lib codex_`: exit 0, 9 tests passed.
+- `cargo xtask wasm`: exit 0; all listed required crates passed, including assistant and UI. Native process code remains excluded from WASM.
+- Pre-commit `cargo xtask ci`: exit 1; fmt passes, recorded baseline Clippy warnings remain. Later stages skipped; separate WASM success is not full CI success.
+- Added dedicated fork-only qualification workflow with macOS, Windows and Linux x86_64/aarch64 runners, downloaded pinned native runtime, process lifecycle/preferences, real private document relay and actual window smoke checks. Initial run: https://github.com/Leonb830/wordcraft/actions/runs/39155959792. Results pending; no platform success is inferred from runner startup. T9 remains unchecked and T10/T11 have not started.
+- `cargo check --target wasm32-unknown-unknown -p wordcraft-web`: exit 0; explicit browser application check supplements xtask's L0–L6 crate set. Focused native/UI Clippy passes with the previously documented baseline allowance; `cargo xtask layers` passes (21 crates).
+- First Windows jobs stopped during test-runtime extraction: GNU tar interpreted `D:` as a remote host. Qualification workflow now uses relative archive paths and converts Windows executable paths explicitly. Windows-only rerun is required; macOS/Linux jobs continue. Workflow dispatch accepts a target subset so fixing infrastructure does not repeat unaffected builds.
