@@ -2234,3 +2234,8 @@
 # Reading Mode column widths (#1040)
 	Narrow	窄
 	Medium	中等
+	Assistant	助理
+	Accept Codex Request	接受 Codex 請求
+	Reject Codex Request	拒絕 Codex 請求
+	Undo Codex Request	復原 Codex 請求
+	Codex	Codex

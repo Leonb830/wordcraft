@@ -38,8 +38,14 @@ was published. The user-facing setup, privacy and recovery instructions are in
 preference, real relay and window checks; exact run/job evidence is in
 [the T9 checklist](tasks/todo.md#t9--complete-2026-10-19).
 
+The assistant pins **`gpt-6.1-sol`** for new and resumed conversations. The model and
+runtime are qualified together: a newer runtime default may omit document tools
+unless its isolated dispatch host is installed. Requalify the executed tool
+catalogue before changing either.
+
 The in-app assistant discovers a separately installed **Codex 0.162.1** native
-executable. It is not bundled, silently downloaded, or upgraded by WordCraft.
+executable and matching `codex-code-mode-host` beside it (with `.exe` on Windows).
+Neither is bundled, silently downloaded, or upgraded by WordCraft.
 Connection settings links to the pinned upstream release and accepts an absolute
 executable path. A version mismatch disables only the assistant. The stdio MCP
 helper is the same WordCraft binary invoked with `--codex-document-bridge`, so
@@ -59,3 +65,10 @@ not permit the external runtime/network flow: the host reports this and suggests
 a native package or AppImage. Do not add host filesystem, network, or process
 escape permissions to Flatpak for this feature. Ordinary CLI/MCP packaging is
 unchanged. Native packages do not require signing or shipping a Codex binary.
+
+T11 adds executed code-mode catalogue qualification: current signed-in models
+require the isolated host. Download its same-target `codex-code-mode-host` archive
+from the same release and preserve the required sibling filename. The host is an
+external Codex dependency, not a new WordCraft helper asset. General `functions`
+and `clock` namespaces are excluded; only the six document MCP tools are callable
+inside it. The expanded six-platform run must pass before T11 is complete.

@@ -2232,3 +2232,8 @@
 # Reading Mode column widths (#1040)
 	Narrow	Schmal
 	Medium	Mittel
+	Assistant	Assistent
+	Accept Codex Request	Codex-Anfrage annehmen
+	Reject Codex Request	Codex-Anfrage ablehnen
+	Undo Codex Request	Codex-Anfrage rückgängig machen
+	Codex	Codex

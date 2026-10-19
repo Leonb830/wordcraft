@@ -2624,3 +2624,8 @@ preview	Title	Ukázka
 # Reading Mode column widths (#1040)
 	Narrow	Úzká
 	Medium	Střední
+	Assistant	Asistent
+	Accept Codex Request	Přijmout požadavek Codex
+	Reject Codex Request	Odmítnout požadavek Codex
+	Undo Codex Request	Vrátit požadavek Codex
+	Codex	Codex

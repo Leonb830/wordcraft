@@ -344,6 +344,17 @@ impl Host {
                 app.assistant.signed_in = Some(false);
                 app.assistant.status = "Signed out of WordCraft's Codex profile.".into();
             }
+            Event::Notification { kind: Notice::Warning, params }
+                if params.get("message").and_then(serde_json::Value::as_str).is_some_and(|message| message.contains("Code Mode is unavailable")) =>
+            {
+                self.shutdown();
+                app.assistant.enabled = false;
+                app.assistant.pending = false;
+                app.assistant.thread = None;
+                app.assistant.turn = None;
+                app.assistant.status = "Install the matching Codex 0.162.1 codex-code-mode-host beside the Codex executable, then reconnect.".into();
+                app.assistant.error = Some(app.assistant.status.clone());
+            }
             Event::Notification { kind: Notice::LoginCompleted, params } => {
                 let matches = app.assistant.login_id.is_some() && params.get("loginId").and_then(|v| v.as_str()) == app.assistant.login_id.as_deref();
                 if matches {
@@ -681,6 +692,16 @@ mod tests {
         app.execute("ui.assistantApprove", json!({"request":"thread:turn"})).unwrap();
         assert_eq!(app.session.doc.final_text(wordcraft_doc::StoryRef::Body), "Revised text\nHuman paragraph");
         assert!(!app.autosave && !app.session.autosave);
+    }
+    #[test]
+    fn codex_missing_dispatch_host_is_actionable_and_redacted() {
+        let (mut host, mut app) = stream_host();
+        notice(&mut host, &mut app, Notice::Warning, json!({"message":"Code Mode is unavailable: PRIVATE PATH"}));
+        assert!(!app.assistant.enabled && !app.assistant.pending);
+        assert!(app.assistant.thread.is_none());
+        assert!(app.assistant.status.contains("codex-code-mode-host"));
+        assert!(!app.assistant.status.contains("PRIVATE"));
+        assert!(host.profile.context().is_none());
     }
     #[test]
     fn codex_auth_events_cancel_expire_and_clear() {

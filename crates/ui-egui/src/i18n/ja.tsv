@@ -2233,3 +2233,8 @@
 # Reading Mode column widths (#1040)
 	Narrow	狭い
 	Medium	中
+	Assistant	アシスタント
+	Accept Codex Request	Codex のリクエストを承認
+	Reject Codex Request	Codex のリクエストを却下
+	Undo Codex Request	Codex のリクエストを元に戻す
+	Codex	Codex

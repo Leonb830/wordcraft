@@ -2247,3 +2247,8 @@
 # Reading Mode column widths (#1040)
 	Narrow	Уска
 	Medium	Средња
+	Assistant	Асистент
+	Accept Codex Request	Прихвати Codex захтев
+	Reject Codex Request	Одбаци Codex захтев
+	Undo Codex Request	Опозови Codex захтев
+	Codex	Codex

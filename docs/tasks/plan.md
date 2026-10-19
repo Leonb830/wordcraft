@@ -241,6 +241,26 @@ Estimates are rough engineering time for planning, not commitments. Each task sh
 
 **Depends on:** T2–T10
 
+### T11 verification repair scope (2026-10-19)
+
+The required full CI currently stops on pre-existing Rust 1.95 Clippy warnings in
+`crates/proof/src/affix.rs`, `crates/doc/src/math_linear.rs`,
+`crates/ui-egui/src/objects.rs` and `xtask/src/visual_diff.rs`. T11 includes minimal,
+semantics-preserving match/boolean simplifications in those files so the required
+workspace gates can run. No existing feature or integration is removed. Any
+further gate failure will be diagnosed and recorded before a necessary repair;
+focused checks alone cannot satisfy final CI. The next Clippy pass also found a
+pre-existing collapsible `w:cr` match in `crates/docx/src/read/story.rs`; include
+the same semantics-preserving match-guard repair there. Two identical baseline
+match warnings in `crates/docbin/src/officeart.rs` need the same repair.
+`apps/wordcraft-cli/src/main.rs` also has an equivalent argument-filter boolean
+warning; simplify the expression without changing argument parsing.
+
+The hosted T11 turn exposed missing model-visible document tools despite passing
+direct relay probes. Add a real-runtime local model-request regression at that
+boundary and repair the qualified model/tool configuration before final E2E;
+keep the same restricted tool surface and stable protocol.
+
 ## Verification strategy
 
 Do not start by making the full repo CI the feedback loop. Add focused checks with each task, then finish with the repository's required `cargo xtask ci` (fmt, clippy, tests, assets/layer checks, and WASM build) and native end-to-end checks.
@@ -281,3 +301,24 @@ Do not start by making the full repo CI the feedback loop. Add focused checks wi
 - [OpenAI Codex app-server overview](https://developers.openai.com/codex/app-server)
 - [Codex as a platform](https://developers.openai.com/blog/codex-as-a-platform)
 - [Codex Sign in with ChatGPT / app-server token sharing](https://developers.openai.com/siwc/token-sharing-open-source/codex-app-server)
+
+### T11 live-runtime repair refinement (2026-10-19)
+
+Signed-in model metadata requires code-only dispatch. A legacy direct-tool model
+pin is insufficient (GPT-5.4 is unavailable; gpt-reserve also requires code-only
+mode once authenticated). Keep experimental code-mode selection disabled; allow
+the pinned runtime's standard local code-mode host for model-required dispatch.
+Exclude the `functions` and `clock` namespaces from nested dispatch so only the
+six WordCraft MCP tools remain. Verify the actual executed catalogue plus absent
+Node/require/fetch/Deno/shell/patch APIs, denied injected native write requests,
+and hosted read/propose/approve. The protocol stays stable stdio with no dynamic
+tools. Add the same-release `codex-code-mode-host` executable to setup and six-OS/CPU
+qualification; no automatic install or new WordCraft release asset. Missing-host
+warnings must give actionable recovery without logging payloads.
+
+Full CI also exposed missing translations for the new Assistant entry and Codex
+review commands. Add those catalogue entries without relaxing the i18n gates.
+
+Full CI on a German macOS environment exposed the existing Breaks-menu tests
+assuming English while inheriting the system locale. Set the fixture language
+explicitly before rendering; preserve the production locale behavior and assertions.

@@ -38,6 +38,11 @@ jobs:
           mkdir -p wordcraft-codex
           curl --fail --location --retry 3 "https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-${{ matrix.target }}.tar.gz" -o codex.tar.gz
           tar -xzf codex.tar.gz -C wordcraft-codex
+          curl --fail --location --retry 3 "https://github.com/openai/codex/releases/download/rust-v0.162.1/codex-code-mode-host-${{ matrix.target }}.tar.gz" -o codex-host.tar.gz
+          tar -xzf codex-host.tar.gz -C wordcraft-codex
+          host_name="codex-code-mode-host"
+          if [ "$RUNNER_OS" = Windows ]; then host_name="$host_name.exe"; fi
+          mv "wordcraft-codex/codex-code-mode-host-${{ matrix.target }}" "wordcraft-codex/$host_name"
           binary="$runtime_temp/wordcraft-codex/codex-${{ matrix.target }}"
           "$binary" --version
           if [ "$RUNNER_OS" = Windows ]; then binary="$(cygpath -w "$binary")"; fi

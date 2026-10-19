@@ -2629,3 +2629,8 @@ preview	Title	Örnek
 # Reading Mode column widths (#1040)
 	Narrow	Dar
 	Medium	Orta
+	Assistant	Asistan
+	Accept Codex Request	Codex isteğini kabul et
+	Reject Codex Request	Codex isteğini reddet
+	Undo Codex Request	Codex isteğini geri al
+	Codex	Codex

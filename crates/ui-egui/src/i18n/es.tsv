@@ -2599,3 +2599,8 @@ preview	Title	Título
 # Reading Mode column widths (#1040)
 	Narrow	Estrecha
 	Medium	Media
+	Assistant	Asistente
+	Accept Codex Request	Aceptar solicitud de Codex
+	Reject Codex Request	Rechazar solicitud de Codex
+	Undo Codex Request	Deshacer solicitud de Codex
+	Codex	Codex

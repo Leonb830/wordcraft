@@ -158,3 +158,28 @@ Codex owns credentials in its private home using the supported file credential
 store, avoiding the global keyring. Auxiliary `history.jsonl` persistence and
 runtime logging are disabled; canonical Codex thread storage remains available
 for resume. WordCraft does not log protocol payloads or provider error text.
+
+## T11 model-visible tool qualification (2026-10-19)
+
+Signed-in model metadata sets `tool_mode=code_mode_only`; disabling the host leaves
+conversations without callable document tools. A direct MCP probe and checking
+only the legacy Responses `tools` array did not test this boundary: Responses Lite
+carries tool definitions in its input, and the private catalogue is populated at
+execution. A fresh custom-provider fixture can also lack signed-in model metadata.
+The temporary GPT-5.4/gpt-reserve pins were rejected during live qualification.
+
+Pin the offered `gpt-6.1-sol` model and require its same-release isolated
+`codex-code-mode-host`. Keep experimental `code_mode` selection disabled; the
+model's required mode uses the standard local host. Configure
+`features.code_mode.excluded_tool_namespaces=["functions","clock"]` so the
+executed nested catalogue contains exactly the six WordCraft MCP tools. Tests
+execute a synthetic call in the actual host and assert absent Node, require,
+fetch, Deno, patch and shell APIs. Broad native approval requests remain denied.
+No dynamic-tool registration or experimental app-server API is enabled.
+
+Official pinned implementation inspected: `core/src/tools/mod.rs` (model mode),
+`core/src/tools/spec_plan.rs` (namespace exclusion), `code-mode/src/remote_session.rs`
+(host lifecycle) and `install-context/src/lib.rs` (matching host installation).
+The user guide and platform workflow require the sibling host. Future runtime/model
+changes must pass executed-catalogue and hosted approved-edit checks. Model IDs
+are availability-dependent, not immutable model-weight snapshots.

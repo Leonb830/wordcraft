@@ -2245,3 +2245,8 @@
 # Reading Mode column widths (#1040)
 	Narrow	Вузька
 	Medium	Середня
+	Assistant	Асистент
+	Accept Codex Request	Прийняти запит Codex
+	Reject Codex Request	Відхилити запит Codex
+	Undo Codex Request	Скасувати запит Codex
+	Codex	Codex

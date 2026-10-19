@@ -2672,3 +2672,8 @@ template	Letter	Thư
 # Reading Mode column widths (#1040)
 	Narrow	Hẹp
 	Medium	Trung bình
+	Assistant	Trợ lý
+	Accept Codex Request	Chấp nhận yêu cầu Codex
+	Reject Codex Request	Từ chối yêu cầu Codex
+	Undo Codex Request	Hoàn tác yêu cầu Codex
+	Codex	Codex

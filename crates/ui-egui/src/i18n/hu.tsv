@@ -2628,3 +2628,8 @@
 # Reading Mode column widths (#1040)
 	Narrow	Keskeny
 	Medium	Közepes
+	Assistant	Asszisztens
+	Accept Codex Request	Codex-kérés elfogadása
+	Reject Codex Request	Codex-kérés elutasítása
+	Undo Codex Request	Codex-kérés visszavonása
+	Codex	Codex

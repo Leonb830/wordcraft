@@ -2630,3 +2630,8 @@ preview	Title	Пример
 # Reading Mode column widths (#1040)
 	Narrow	Узкая
 	Medium	Средняя
+	Assistant	Ассистент
+	Accept Codex Request	Принять запрос Codex
+	Reject Codex Request	Отклонить запрос Codex
+	Undo Codex Request	Отменить запрос Codex
+	Codex	Codex

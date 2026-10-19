@@ -2622,3 +2622,8 @@ preview	Title	Tytuł
 # Reading Mode column widths (#1040)
 	Narrow	Wąska
 	Medium	Średnia
+	Assistant	Asystent
+	Accept Codex Request	Zaakceptuj żądanie Codex
+	Reject Codex Request	Odrzuć żądanie Codex
+	Undo Codex Request	Cofnij żądanie Codex
+	Codex	Codex

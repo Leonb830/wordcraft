@@ -7,12 +7,21 @@ release has been published. Build this branch using the README's Cargo command.
 Once WordCraft is open, setup and conversations use its Assistant pane and your
 browser; no terminal chat command is needed.
 
+The assistant pins **`gpt-6.1-sol`** for new and resumed conversations. The model and
+runtime are qualified together: a newer runtime default may omit document tools
+unless its isolated dispatch host is installed. Requalify the executed tool
+catalogue before changing either.
+
 ## Set up
 
 1. Open **Assistant** in WordCraft's title bar, then **Connection settings**.
 2. Choose **Get Codex 0.162.1 for your computer**. Download the matching archive
    from the [official pinned release](https://github.com/openai/codex/releases/tag/rust-v0.162.1)
-   and extract it. WordCraft requires exactly **0.162.1** and does not install or
+   and extract it. Also download the corresponding
+   `codex-code-mode-host-<same target>.tar.gz` from that release. Extract the host
+   beside Codex and rename it to `codex-code-mode-host` (`codex-code-mode-host.exe`
+   on Windows). A complete official installation may already include the host.
+   WordCraft requires exactly **0.162.1** and does not install or
    upgrade it. Keep this executable in a stable location.
 3. Enter the extracted executable's **full absolute path** in **Installed Codex
    0.162.1 executable**. You can leave the field blank if that version is already
@@ -37,6 +46,8 @@ Choose the archive for your computer:
 | Linux | ARM64 | `codex-aarch64-unknown-linux-musl.tar.gz` |
 | Linux | Intel/AMD 64-bit | `codex-x86_64-unknown-linux-musl.tar.gz` |
 
+Keep both executables in the same folder. The isolated host runs only the six
+WordCraft document tools; it has no Node, filesystem or network globals.
 Use the executable inside the archive, not the archive itself. On macOS/Linux
 it must have executable permission. If your OS blocks an untrusted download,
 follow its normal verification and installation process for the official binary.
@@ -131,6 +142,7 @@ revisions or request metadata. Disconnecting is not signing out or deleting data
 | What you see | What to do |
 | --- | --- |
 | Codex not found | Extract the matching archive and set the full executable path in Connection settings. Desktop app PATH can differ from a terminal's PATH. |
+| Missing code-mode host | Install the matching 0.162.1 host beside Codex, using the filename above; reconnect. |
 | Unsupported version | Select the exact 0.162.1 executable. Keep it separate from a package manager's automatically updated Codex. |
 | Signed out / expired authentication | Use Sign in with ChatGPT, then Check sign-in. Reconnect and resume if necessary; grant context again. |
 | Browser sign-in fails | Cancel the pending flow, close any other pending Codex sign-in, then start a fresh sign-in from WordCraft. Never paste credentials into a conversation. |

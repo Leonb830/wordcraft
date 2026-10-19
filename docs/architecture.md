@@ -1,8 +1,10 @@
 # WordCraft architecture
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (`proof` is per language: English and Polish; previously major: first committed version; `plan/architecture.md` is local-only) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-19 · **Last updated:** 2026-10-19 · **Change:** minor (fork Codex architecture); previous: minor (`proof` is per language: English and Polish; previously major: first committed version; `plan/architecture.md` is local-only) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
-How WordCraft is built today (origin/main `40c5d51`). The longer design notes in
+Fork update (2026-10-19): native Codex assistant on `codex/wordcraft-vnext`,
+based on upstream `eae2421`. Original architecture measurements below date from
+2026-10-10 and are not re-measured line counts. The longer design notes in
 `plan/architecture.md` are gitignored and local to the original author's machine; this file is the
 committed, current summary. Rules for working in the code are in [`AGENTS.md`](../AGENTS.md).
 
@@ -27,7 +29,8 @@ winit or rfd.
 | L4 | `engine` | 15.2k | `Session` (document, selection, undo, layout cache, view state), **command registry** (422 `CommandSpec`s in `cmd/*.rs`), Word feature catalog (`catalog.rs`), samples, file I/O dispatch (`io.rs`), Read Aloud sentence model |
 | L4 | `zotero` | 1.7k | Zotero's word-processor integration protocol answered against a `Session` |
 | L4 | `control-key` | 0.1k | Per-window control-port key files shared by the app and the MCP bridge |
-| L5 | `mcp` | 1.0k | MCP server: every command as a tool; headless or bridged to the running app |
+| L5 | `mcp` | — | Existing headless/native MCP; separate closed Codex document profile |
+| L5 | `assistant` | — | Typed app-server protocol, bounded private stdio transport and native child lifecycle |
 | L6 | `ui-egui` | 13.1k | Word-style front end: ribbon, keytips, mini-toolbar, Backstage, canvas, rulers, panes, dialogs, Equation tab, i18n catalogs, themes, control channel, headless `ui_shot` example |
 | apps | `wordcraft` | 1.6k | Desktop app (eframe + wgpu; logging, window geometry, file associations) |
 | apps | `wordcraft-cli` | 0.4k | `convert`, `text`, `inspect`, `run`, `commands`, `parity`, `mcp`, `zotero` |
@@ -48,6 +51,37 @@ winit or rfd.
    an egui/wgpu canvas; PDF export walks the same display list through `pdf`.
 5. **Save:** `engine::io` picks a writer by extension.
 
+## Native Codex assistant (fork)
+
+`apps/wordcraft::codex_service::Host` owns an opt-in, version-checked Codex child,
+private profile and active thread/turn. `wordcraft-assistant` handles bounded
+JSONL framing, timeouts and shutdown; native process code is excluded from WASM.
+L6 exposes typed UI actions and displays streamed state without process I/O.
+Authentication uses the runtime's ChatGPT browser flow in the separate profile.
+No global Codex config is changed and protocol payloads are not diagnostic logs.
+
+The helper entry point `wordcraft --codex-document-bridge` exposes six closed
+MCP tools. Standard MCP form elicitation carries calls back through stable
+app-server events to the native host, which checks thread/turn ownership.
+`mcp::codex_profile` independently enforces explicit captured context,
+document identity/revision, text limits and tool names. The original MCP Backend
+and external CLI/control routes remain separate. Codex gets no control socket,
+filesystem/shell/UI/screenshot/save/export or arbitrary command tools.
+
+`propose_selection` queues one plain paragraph-selection preview per turn.
+Only the person's `ui.assistantApprove` action mutates the engine. It revalidates
+revision/scope, pauses AutoSave and creates Codex-authored insertion/deletion
+revisions plus request/thread metadata. Scoped accept/reject/undo operates on
+those IDs and refuses overlapping human edits. DOCX preserves tracked changes
+and audit metadata; request cards and accepted-request undo are session-local.
+Normal saves remain user actions.
+
+Settings store pane visibility, runtime path and bounded thread references, with
+no transcript or consent grant. Codex owns canonical conversations/credentials
+inside its private home. Reconnect/resume always requires new sharing consent.
+See [ADR 0001](decisions/0001-codex-app-server.md), [user guide](assistant.md) and
+[verification checklist](tasks/todo.md) for limits and evidence.
+
 ## Testing and gates
 
 - 821 `#[test]` functions and 10 property-test blocks: model, layout, DOCX round-trip and hostile
@@ -64,5 +98,6 @@ winit or rfd.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-19 | minor | Fork native Codex service, closed relay, request approval/review, private settings and WASM boundary |
 | 2026-10-10 | minor | `proof`: proofing languages (English, Polish), affix engine, Polish patterns; layout and engine route each run by its language |
 | 2026-10-10 | major | First committed architecture doc, from the crates' sources and `AGENTS.md` |
