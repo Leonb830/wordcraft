@@ -142,6 +142,9 @@ fn installed_runtime_advertises_only_qualified_document_tools() {
                     Err(error) => panic!("fixture accept: {error}"),
                 }
             };
+            // Windows can inherit the listener's nonblocking mode on accept.
+            // Only accept is polled; request reads use a bounded blocking timeout.
+            stream.set_nonblocking(false).unwrap();
             stream.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
             let mut reader = BufReader::new(stream.try_clone().unwrap());
             let mut length = 0;

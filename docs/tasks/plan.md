@@ -340,3 +340,9 @@ draft then multi-paragraph replacement, scoped review and later human changes,
 consent/stale/forbidden tools, DOCX round-trip, UI preview and hosted native turns.
 Update guides/ADR/parity/gap/checklist, run full CI and WASM, qualify the expanded
 actual-runtime catalogue, and push to the same fork branch.
+
+Native follow-up: Windows x64 exposed the local Responses fixture inheriting a
+nonblocking socket from its polled listener. Explicitly set each accepted stream
+to blocking before applying the existing read timeout; retain all catalogue and
+denied-write assertions and requalify Windows x64. The other five platforms passed
+the expanded catalogue/relay checks; their production implementation is unchanged.

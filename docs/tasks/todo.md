@@ -271,7 +271,7 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 - [x] Extend tracked proposal application and scoped review/undo to paragraph structure.
 - [x] Add insertion-point sharing and bounded insertion/paragraph MCP tools.
 - [ ] Verify engine, MCP, UI, DOCX, native hosted flow, existing integrations, CI and WASM.
-- [ ] Update documentation and push the verified follow-up.
+- [x] Update documentation and push the locally verified follow-up.
 
 T12 supersedes the single-paragraph limit recorded in T7/T11. The private catalogue
 now has five read tools and three preview-only proposal tools. Paragraph breaks are
@@ -309,11 +309,49 @@ document identity/revision, pauses AutoSave and leaves saving to the user.
   were inspected. The preview shows the captured paragraph, original/proposed
   text, approval/deny controls, and insertion-point sharing; screenshots stay
   outside the repository. Existing user windows/documents were not modified.
-- Hosted follow-up is pending: macOS evicted files in the task's WordCraft profile.
+- Hosted follow-up initially encountered macOS-evicted files in the task's WordCraft profile.
   A separate UI profile avoided the evicted UI preferences, but runtime startup
-  blocks on a cloud-evicted SQLite file. Automatic approval review rejected
+  blocked on a cloud-evicted SQLite file. Automatic approval review rejected
   restoring `goals_1.sqlite`, `memories_1.sqlite` and `installation_id` because they
-  may contain private data; no restoration was performed. User permission is
-  needed before that live check can continue. Authentication contents were not
-  read or copied, and global Codex settings were not changed.
-- Follow-up six-platform qualification and push evidence are pending.
+  may contain private data. The user then explicitly approved restoring those
+  three files; macOS restored them without their contents being inspected.
+  Authentication contents were not read or copied, and global Codex settings
+  were not changed.
+- Signed-in hosted checks then passed against the actual pinned model/runtime:
+  `python3 ../t12_hosted.py` exited 0. `propose_insertion` queued three paragraphs
+  on a blank page; the document stayed blank until approval. Approval created
+  real paragraphs with Codex revisions and paused AutoSave. Manual DOCX save
+  retained authors and request metadata; accepted-request undo restored one blank
+  paragraph. `propose_paragraphs` replaced two paragraphs with three after approval;
+  scoped accept and accepted undo preserved the separate human insertion/deletion
+  revisions. Reopening the saved DOCX retained both authors. Actual native blank
+  preview, multi-paragraph approval/review and reopened-document screenshots were
+  inspected; fixtures and screenshots remain outside the repository.
+- A subsequent actual restart of only the clean synthetic window reopened that
+  DOCX with both authors and resumed the hosted conversation with sharing off.
+  Assistant preferences contain only `version`, `open`, `binary`, `recent`;
+  application diagnostic logs contain none of the synthetic document canaries.
+- Implementation commit `148caa063ba31d6a4dd6eb9a69021f44ecaac238` is pushed to
+  `Leonb830/wordcraft:codex/wordcraft-vnext`. The repository is public and remains
+  a fork of `storytold/wordcraft`; upstream push is disabled. No upstream PR or
+  release was created. The six-platform qualification completed with five passes
+  and the Windows test-fixture failure described below:
+  [39321229685](https://github.com/Leonb830/wordcraft/actions/runs/39321229685).
+- That run exposed an existing Windows fixture race: `read_line` failed with
+  WSAEWOULDBLOCK (10035) because the accepted socket inherited the nonblocking
+  listener mode. The actual document relay test passed. The synthetic Responses
+  fixture now explicitly restores blocking mode before its existing 10-second
+  read timeout; all catalogue and denied-write assertions remain unchanged.
+  Both installed-runtime tests pass locally after the fix. Full local CI also
+  passed all six gates again (2,818 tests; 0 failures; 10 opt-in ignores). The
+  Windows x64 qualification rerun must pass before T12 is complete; the production
+  implementation on the five passing platforms is unchanged.
+
+| Platform | T12 qualification job | Result |
+| --- | --- | --- |
+| Linux x64 | [118295507545](https://github.com/Leonb830/wordcraft/actions/runs/39321229685/job/118295507545) | Passed |
+| Windows ARM64 | [118295507812](https://github.com/Leonb830/wordcraft/actions/runs/39321229685/job/118295507812) | Passed |
+| Linux ARM64 | [118295507853](https://github.com/Leonb830/wordcraft/actions/runs/39321229685/job/118295507853) | Passed |
+| macOS Intel | [118295507982](https://github.com/Leonb830/wordcraft/actions/runs/39321229685/job/118295507982) | Passed |
+| macOS Apple silicon | [118295508311](https://github.com/Leonb830/wordcraft/actions/runs/39321229685/job/118295508311) | Passed |
+| Windows x64 | Follow-up run pending | Fixture corrected; awaiting qualification |
