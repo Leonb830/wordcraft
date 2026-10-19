@@ -15,8 +15,11 @@ fn safe_root(root: &Path) -> bool {
         return false;
     }
     let Some(actual) = root.ancestors().find_map(|p| std::fs::canonicalize(p).ok()) else { return false };
-    let globals =
-        [std::env::var_os("CODEX_HOME").map(std::path::PathBuf::from), std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".codex"))];
+    let globals = [
+        std::env::var_os("CODEX_HOME").map(std::path::PathBuf::from),
+        std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".codex")),
+        std::env::var_os("USERPROFILE").map(|h| std::path::PathBuf::from(h).join(".codex")),
+    ];
     !globals.into_iter().flatten().filter_map(|p| std::fs::canonicalize(p).ok()).any(|p| actual.starts_with(p))
 }
 pub fn load(root: &Path, state: &mut State) {
@@ -107,7 +110,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let mut state = State {
             open: true,
-            binary: "/synthetic/codex".into(),
+            binary: temp.path().join("codex").to_string_lossy().into_owned(),
             composer: "SECRET_PROMPT".into(),
             login_url: Some("SECRET_AUTH_URL".into()),
             login_id: Some("SECRET_LOGIN_ID".into()),
@@ -124,7 +127,7 @@ mod tests {
         load(temp.path(), &mut restored);
         assert_eq!(restored.recent, vec!["valid-thread"]);
         assert!(restored.open);
-        assert_eq!(restored.binary, "/synthetic/codex");
+        assert_eq!(restored.binary, state.binary);
         assert!(restored.messages.is_empty() && restored.composer.is_empty() && restored.signed_in.is_none() && restored.thread.is_none());
         restored.recent.clear();
         save(temp.path(), &value(&restored)).unwrap();

@@ -14,7 +14,9 @@ impl Drop for Owned {
 #[test]
 #[ignore = "requires native window session and WORDCRAFT_CODEX_BINARY"]
 fn native_platform_runtime_and_editor_smoke() {
-    let binary = std::env::var_os("WORDCRAFT_CODEX_BINARY").expect("set the installed pinned Codex binary");
+    let binary = std::path::PathBuf::from(std::env::var_os("WORDCRAFT_CODEX_BINARY").expect("set the installed pinned Codex binary"));
+    assert!(binary.is_absolute() && binary.is_file());
+    assert!(json!(binary).is_string());
     let temp = tempfile::tempdir().unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -25,7 +27,7 @@ fn native_platform_runtime_and_editor_smoke() {
             .env("WORDCRAFT_PROFILE_DIR", temp.path())
             .env("WORDCRAFT_NO_PREFS", "1")
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::inherit())
             .spawn()
             .unwrap(),
     );

@@ -168,7 +168,11 @@ fn prepare(launch: &Launch) -> Result<(), Error> {
     if std::env::var_os("CODEX_HOME").is_some_and(|home| launch.home.as_os_str() == home) {
         return Err(Error::Configuration);
     }
-    let globals = [std::env::var_os("CODEX_HOME").map(PathBuf::from), std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".codex"))];
+    let globals = [
+        std::env::var_os("CODEX_HOME").map(PathBuf::from),
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".codex")),
+        std::env::var_os("USERPROFILE").map(|h| PathBuf::from(h).join(".codex")),
+    ];
     let globals = globals.into_iter().flatten().filter_map(|p| std::fs::canonicalize(p).ok()).collect::<Vec<_>>();
     for path in [&launch.home, &launch.cwd] {
         let actual = path.ancestors().find_map(|p| std::fs::canonicalize(p).ok()).ok_or(Error::Configuration)?;
@@ -179,7 +183,11 @@ fn prepare(launch: &Launch) -> Result<(), Error> {
     std::fs::create_dir_all(&launch.home).map_err(|_| Error::Configuration)?;
     std::fs::create_dir_all(&launch.cwd).map_err(|_| Error::Configuration)?;
     let actual = std::fs::canonicalize(&launch.home).map_err(|_| Error::Configuration)?;
-    let globals = [std::env::var_os("CODEX_HOME").map(PathBuf::from), std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".codex"))];
+    let globals = [
+        std::env::var_os("CODEX_HOME").map(PathBuf::from),
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".codex")),
+        std::env::var_os("USERPROFILE").map(|h| PathBuf::from(h).join(".codex")),
+    ];
     if globals.into_iter().flatten().filter_map(|p| std::fs::canonicalize(p).ok()).any(|p| actual.starts_with(p))
         || std::fs::symlink_metadata(launch.home.join("config.toml")).is_ok_and(|m| m.file_type().is_symlink())
     {
@@ -206,7 +214,7 @@ fn run(launch: Launch, requests: Receiver<Input>, events: &SyncSender<Event>, st
     prepare(&launch)?;
     let mut command = Command::new(&launch.binary);
     command.args(["app-server", "--listen", "stdio://"]).env_clear();
-    for name in ["PATH", "HOME", "USER", "TMPDIR", "TEMP", "TMP", "SystemRoot", "LOCALAPPDATA", "APPDATA", "LANG"] {
+    for name in ["PATH", "HOME", "USERPROFILE", "USER", "TMPDIR", "TEMP", "TMP", "SystemRoot", "LOCALAPPDATA", "APPDATA", "LANG"] {
         if let Some(value) = std::env::var_os(name) {
             command.env(name, value);
         }

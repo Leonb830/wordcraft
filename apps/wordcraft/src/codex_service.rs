@@ -540,9 +540,10 @@ fn detect(selected: &str) -> Option<PathBuf> {
         return path.is_absolute().then_some(path).filter(|p| p.is_file());
     }
     let name = if cfg!(target_os = "windows") { "codex.exe" } else { "codex" };
-    let mut candidates = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).map(|d| d.join(name)).collect::<Vec<_>>()).unwrap_or_default();
+    let candidates = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).map(|d| d.join(name)).collect::<Vec<_>>()).unwrap_or_default();
     #[cfg(target_os = "macos")]
-    candidates.extend([PathBuf::from("/opt/homebrew/bin/codex"), PathBuf::from("/usr/local/bin/codex")]);
+    let candidates =
+        candidates.into_iter().chain([PathBuf::from("/opt/homebrew/bin/codex"), PathBuf::from("/usr/local/bin/codex")]).collect::<Vec<_>>();
     candidates.into_iter().find(|p| p.is_absolute() && p.is_file())
 }
 
