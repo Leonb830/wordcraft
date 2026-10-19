@@ -62,6 +62,15 @@
   <a href="#license-and-credits">License and credits</a>
 </p>
 
+## Codex assistant in this fork
+
+The `codex/wordcraft-vnext` branch adds an in-app Codex conversation pane with
+explicit selection/document sharing, streamed responses and approval before
+tracked edits. See the [setup and privacy guide](docs/assistant.md). It requires a
+separately installed Codex 0.162.1 runtime on supported 64-bit macOS, Windows or
+Linux. This fork feature is not in upstream release downloads; no fork release
+has been published.
+
 ## A tour
 
 Every screenshot below is WordCraft itself, rendered offscreen by its own UI test harness
@@ -98,7 +107,7 @@ Every screenshot below is WordCraft itself, rendered offscreen by its own UI tes
 - **Built for agents.** Every action is a command with an id. The same 422 commands drive the
   ribbon, keyboard shortcuts, the command search, a command-line tool, a JSON control channel and
   an MCP server.
-- **Private.** Spelling, grammar and everything else work offline.
+- **Private.** Document editing, spelling and grammar work offline. The optional Codex assistant uses an online account.
 - **Open.** MIT OR Apache-2.0. Clean-room: built from public specifications and observation, with
   every asset original or openly licensed.
 
@@ -127,7 +136,7 @@ The honest picture, area by area, is in [ROADMAP.md](ROADMAP.md), the
 ## Quick start
 
 ```sh
-git clone https://github.com/storytold/wordcraft
+git clone --branch codex/wordcraft-vnext https://github.com/Leonb830/wordcraft
 cd wordcraft
 cargo run --release -p wordcraft -- --sample        # the desktop app with the sample document
 cargo run --release -p wordcraft -- report.docx     # open a document
@@ -190,7 +199,7 @@ covers every target starting with it (`wordcraft*=debug`). The logger is
 | L2 | `wordcraft-layout`, `wordcraft-docx`, `wordcraft-formats` | line breaking, pagination, tables, notes, hit testing; OOXML; ODT/RTF/HTML/Markdown/TXT |
 | L3 | `wordcraft-render`, `wordcraft-pdf` | rasteriser (vello_cpu); PDF ([craft-pdf](docs/shared-pdf.md), Krilla) |
 | L4 | `wordcraft-engine` | session, undo, 422 commands, Word feature catalog |
-| L5 | `wordcraft-mcp` | MCP server |
+| L5 | `wordcraft-mcp`, `wordcraft-assistant` | MCP server and restricted Codex profile; native app-server client |
 | L6 | `wordcraft-ui-egui` | the Word-style front end (swappable) |
 | apps | `wordcraft`, `wordcraft-cli`, `wordcraft-web` | desktop, command line, browser |
 

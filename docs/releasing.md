@@ -32,6 +32,12 @@ environment's branch rule, so no draft release is made.
 
 ## Codex runtime qualification
 
+Fork development branch: `codex/wordcraft-vnext`, qualified 2026-10-19. No release
+was published. The user-facing setup, privacy and recovery instructions are in
+[assistant.md](assistant.md). All six native combinations passed the lifecycle,
+preference, real relay and window checks; exact run/job evidence is in
+[the T9 checklist](tasks/todo.md#t9--complete-2026-10-19).
+
 The in-app assistant discovers a separately installed **Codex 0.162.1** native
 executable. It is not bundled, silently downloaded, or upgraded by WordCraft.
 Connection settings links to the pinned upstream release and accepts an absolute

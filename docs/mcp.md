@@ -15,6 +15,22 @@ With `--connect`, the bridge sends the app's control key, which it reads from
 `WORDCRAFT_CONTROL_KEY` or from the key file the app writes at start. It sends the key only to
 loopback addresses; see [Keys](control-protocol.md#keys).
 
+## In-app Codex assistant
+
+The [Assistant pane](assistant.md) starts its own Codex app-server and private
+WordCraft helper. It needs no `claude mcp add` or global MCP configuration. Its
+separate profile exposes only `context_status`, `read_context`, `read_selection`,
+`find_text`, `inspect_formatting` and preview-only `propose_selection`. The host
+checks explicit sharing, document revision and conversation scope. Document writes
+wait for a person's approval in WordCraft; save/export and general `execute`,
+filesystem, shell, UI-control and screenshot tools are unavailable to Codex.
+
+The ordinary CLI/MCP commands below remain available to external agents with their
+existing permissions, author settings and optional automation roots. Connecting
+an external agent does not apply the Assistant pane's narrower permission policy.
+Do not configure `--codex-document-bridge` as a general MCP server: it requires the
+private app-server/host relay and is managed by WordCraft.
+
 ## Tracked changes by an agent
 
 Tracked changes and comments are recorded under the session's user name ("WordCraft User" by

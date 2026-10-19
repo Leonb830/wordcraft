@@ -69,9 +69,9 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 
 ## Release
 
-- [ ] **T10 — User setup and help documentation** (2–3 h; depends on T2–T9)
-  - [ ] Document runtime setup, sign-in, context sharing, approval/review, supported targets, and troubleshooting.
-  - [ ] Keep CLI/MCP docs accurate and describe how the in-app assistant relates to those paths.
+- [x] **T10 — User setup and help documentation** (2–3 h; depends on T2–T9)
+  - [x] Document runtime setup, sign-in, context sharing, approval/review, supported targets, and troubleshooting.
+  - [x] Keep CLI/MCP docs accurate and describe how the in-app assistant relates to those paths.
   - **Checkpoint:** a new user can follow the docs without a terminal chat workflow.
 
 - [ ] **T11 — Release verification and roadmap update** (1–2 h; depends on T2–T10)
@@ -226,3 +226,10 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 - Windows arm64 (job 118194888650) and Linux x86_64 (job 118194888726) are fully green in run 39292033977. Linux arm64 is fully green in rerun https://github.com/Leonb830/wordcraft/actions/runs/39292682956 (job 118197108457). Each includes the actual native-window smoke, private document relay, lifecycle and preference checks. The fixture hard-link regression passes locally (2 unit + 8 integration tests); it changes only test setup. Windows x86_64 and macOS Intel are still pending.
 
 - Final matrix verified on 2026-10-19: Windows x86_64 (118194888603) and macOS Intel (118194888691) also succeeded. All six combinations now pass lifecycle/preferences, installed-runtime private relay, and native window checks. Five jobs are in [run 39292033977](https://github.com/Leonb830/wordcraft/actions/runs/39292033977); Linux ARM passes in [rerun 39292682956](https://github.com/Leonb830/wordcraft/actions/runs/39292682956). The first run's failed Linux ARM fixture job is superseded, not represented as a passing run. T9 is complete; T10 may now begin.
+
+### T10 — complete (2026-10-19)
+
+- Added `docs/assistant.md`; updated README, MCP and release docs (four user-facing files). Setup uses the shipped pane labels, pinned native archive names, browser sign-in, explicit sharing, preview/approval and manual save. Documents session-only review cards/accepted undo, private runtime storage, unsupported platforms and unchanged external integrations. README distinguishes this fork branch from upstream downloads.
+- `python3 ../t10-setup-check.py`: fresh native profile checks passed (disabled startup, settings, real pinned runtime, signed-out status, sharing off, disconnect/close). Existing signed-in profile reconnected and resumed successfully; the initial fixed two-message assertion failed because the stored thread had since gained another message. Follow-up control assertions passed: signedIn=true, expected thread, three messages, sharing off. No credential was read or copied and no second sign-in was requested. The user's completed T8 clean-profile browser sign-in supplies that step's live evidence.
+- Window-only screenshots `codex-clean-setup.png` and `codex-guide-resume.png` inspected against the guide. Relative-link validation across all four edited documents passed. Archive names checked against the qualification workflow and successful native job logs; Windows ARM used the native aarch64 binary.
+- `git diff --check`: exit 0. Pre-commit `cargo xtask ci`: exit 1; fmt passes, recorded baseline Clippy warnings still stop later stages. T11 must resolve these and run full CI before completion.
