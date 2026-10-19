@@ -71,4 +71,7 @@ require the isolated host. Download its same-target `codex-code-mode-host` archi
 from the same release and preserve the required sibling filename. The host is an
 external Codex dependency, not a new WordCraft helper asset. General `functions`
 and `clock` namespaces are excluded; only the six document MCP tools are callable
-inside it. The expanded six-platform run must pass before T11 is complete.
+inside it. The expanded six-platform qualification passed in
+[run 39312512365](https://github.com/Leonb830/wordcraft/actions/runs/39312512365)
+at implementation commit `a8413e9`; see the checklist for each native job and
+the separate signed-in, local end-to-end checks.

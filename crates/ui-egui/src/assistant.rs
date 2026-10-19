@@ -319,7 +319,8 @@ pub fn connection(app: &mut WordApp, ctx: &egui::Context) {
             .wrap(),
         );
         ui.hyperlink_to("Get Codex 0.162.1 for your computer", "https://github.com/openai/codex/releases/tag/rust-v0.162.1");
-        ui.label("Extract Codex and its matching codex-code-mode-host from release 0.162.1 into the same folder. Enter the full Codex path below.");
+        ui.label("Extract Codex and its matching host from release 0.162.1 into the same folder.");
+        ui.label("Rename the host to codex-code-mode-host (codex-code-mode-host.exe on Windows). Enter the full Codex path below.");
         ui.label("The host runs only restricted document tools. WordCraft does not install or update these executables.");
         ui.label("Installed Codex 0.162.1 executable (leave blank to detect)");
         ui.text_edit_singleline(&mut app.assistant.binary);

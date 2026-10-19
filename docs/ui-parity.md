@@ -1,10 +1,21 @@
 # UI parity with Microsoft Word
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** trivial (Modify Table Style formats every table style part, #714); previously trivial: a click on the ribbon chrome hands the keyboard to the page in the same frame, #1093 follow-up; previously trivial: Page Setup vertical alignment, #1320; previously trivial: the app opens on the Home tab every launch, as in Word; previously trivial: no document behind the Start screen, #1129; previously trivial: equation pictures share a few textures, #1002; previously trivial: selection bar in the left margin, #856; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously major: first version; ribbon, dialogs, shortcuts and on-canvas interaction measured from `crates/ui-egui` and the command registry) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-19 · **Last updated:** 2026-10-19 · **Change:** minor (fork Assistant pane); previous: trivial (Modify Table Style formats every table style part, #714); previously trivial: a click on the ribbon chrome hands the keyboard to the page in the same frame, #1093 follow-up; previously trivial: Page Setup vertical alignment, #1320; previously trivial: the app opens on the Home tab every launch, as in Word; previously trivial: no document behind the Start screen, #1129; previously trivial: equation pictures share a few textures, #1002; previously trivial: selection bar in the left margin, #856; previously trivial: table column and row markers on the rulers, #700; previously trivial: table borders and the resize handle drag on the page, #217; previously major: first version; ribbon, dialogs, shortcuts and on-canvas interaction measured from `crates/ui-egui` and the command registry) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft looks and feels next to Word: ribbon, dialogs, panes, keyboard, mouse and touch.
 Typing behaviour has its own checklist ([`typing-parity.md`](typing-parity.md)). All assets are our
 own (`AGENTS.md`: no Microsoft iconography, ever).
+
+Fork extension (2026-10-19): `codex/wordcraft-vnext` adds the title-bar Assistant
+entry, a resizable conversation pane, explicit context-sharing controls, streaming
+progress and Stop/Retry, browser sign-in settings, and proposal/approval/review
+cards. Approval pauses AutoSave and identifies edits as Codex; request-scoped
+review preserves unrelated changes. The composer and sharing indicator stay
+visible during longer conversations. Existing panes and external integrations
+remain available. Native window checks and screenshots are recorded in the
+[task evidence](tasks/todo.md); setup and current scope are in the
+[assistant guide](assistant.md). Pane text is still partly English. This fork
+extension does not change the Word-parity estimates below.
 
 Document title opens Rename Document; the account badge opens Options › General for user name and initials. Saved documents retain their format and refuse conflicting names; desktop renaming requires a filesystem that supports hard links. Web renaming changes the next download name. An unsaved document's name is only the name Save suggests: its Title property is left alone.
 
@@ -59,6 +70,7 @@ Document title opens Rename Document; the account badge opens Options › Genera
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-19 | minor | Fork Assistant pane, explicit sharing, streamed progress, approval and scoped review; verified UI evidence linked; existing parity estimates unchanged |
 | 2026-10-13 | trivial | New/Modify Table Style: No Border on a part that inherits its lines hides them; emptying the font box makes the part's font inherited again (#1288) |
 | 2026-10-14 | trivial | Tab stops edited on the ruler: corner kind selector, click to set, drag to move or off to clear, per-kind markers mirrored for RTL; each gesture one `para.tabs` call and one undo step; Rulers 85% → 90% |
 | 2026-10-12 | trivial | Tables on the page: one selected cell (Select Cell, or a click along its left edge) is a cell selection when its border is dragged: the border moves in its row only (#962) |

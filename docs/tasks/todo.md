@@ -74,9 +74,9 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
   - [x] Keep CLI/MCP docs accurate and describe how the in-app assistant relates to those paths.
   - **Checkpoint:** a new user can follow the docs without a terminal chat workflow.
 
-- [ ] **T11 — Release verification and roadmap update** (1–2 h; depends on T2–T10)
+- [x] **T11 — Release verification and roadmap update** (1–2 h; depends on T2–T10)
   - [x] Update architecture and roadmap/gap status.
-  - [ ] Run `cargo xtask ci` and native end-to-end checks.
+  - [x] Run `cargo xtask ci` and native end-to-end checks.
   - [x] Recheck CLI/MCP and external-agent workflows.
   - **Checkpoint:** tested release candidate with no deleted existing integration paths.
 
@@ -235,7 +235,7 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 - `git diff --check`: exit 0. Pre-commit `cargo xtask ci`: exit 1; fmt passes, recorded baseline Clippy warnings still stop later stages. T11 must resolve these and run full CI before completion.
 
 
-### T11 — in progress (2026-10-19)
+### T11 — complete (2026-10-19)
 
 - Updated architecture, roadmap/gap status, setup/release guidance and the ADR. Kept existing integrations and alpha estimates; no release or upstream PR was published.
 - The live read/propose check found a real gap in earlier direct-relay qualification: signed-in model metadata requires code-only tool dispatch. The pinned runtime now uses its matching isolated host, with general `functions`/`clock` namespaces excluded, and pins `gpt-6.1-sol` on start/resume. Earlier GPT-5.4/gpt-reserve attempts did not establish hosted document access and were abandoned. No experimental app-server API or dynamic tools were added.
@@ -249,3 +249,19 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 - Final native reruns: `cargo test -p wordcraft --test codex_host -- --ignored --test-threads=1` passed all 3 window/lifecycle/preferences/stream/stop/retry tests; `cargo test -p wordcraft --bin wordcraft codex_ -- --include-ignored` passed all 8 service/auth/settings tests; `cargo test -p wordcraft --test codex_bridge -- --ignored` passed both real-runtime tests. `cargo check --target wasm32-unknown-unknown -p wordcraft-web`: exit 0. Relative-link validation across eight changed guides/design/task documents and `git diff --check` passed.
 
 - `cargo xtask ci`: exit 0, all six stages passed (fmt, strict Clippy, workspace tests, assets, layers, WASM). Workspace result: 2,808 passed, 0 failed, 10 intentionally ignored across 84 result blocks; the relevant opt-in native tests were run separately above. Layer check passed for 21 crates; all 17 listed WASM crates passed. This supersedes the earlier baseline/locale/environment failures. The expanded six-platform runtime/host qualification remains the final outstanding gate.
+
+- Expanded native qualification: [run 39312512365](https://github.com/Leonb830/wordcraft/actions/runs/39312512365) **succeeded**, implementation commit `a8413e974cf18628d3fcaa10c455d1e6a7d1cc4f`. Every job installs the pinned runtime and matching host, runs lifecycle/preferences, executes both real-runtime boundary tests (including the six-tool catalogue and denied write), and opens a native window. No hosted credentials or release artifacts are used in CI.
+
+| Platform | Qualification job | Result |
+| --- | --- | --- |
+| native (windows-2025, x86_64-pc-windows-msvc.exe) | [118265487698](https://github.com/Leonb830/wordcraft/actions/runs/39312512365/job/118265487698) | Passed |
+| native (macos-15-intel, x86_64-apple-darwin) | [118265487843](https://github.com/Leonb830/wordcraft/actions/runs/39312512365/job/118265487843) | Passed |
+| native (ubuntu-24.04-arm, aarch64-unknown-linux-musl) | [118265487881](https://github.com/Leonb830/wordcraft/actions/runs/39312512365/job/118265487881) | Passed |
+| native (macos-15, aarch64-apple-darwin) | [118265487977](https://github.com/Leonb830/wordcraft/actions/runs/39312512365/job/118265487977) | Passed |
+| native (windows-11-arm, aarch64-pc-windows-msvc.exe) | [118265488042](https://github.com/Leonb830/wordcraft/actions/runs/39312512365/job/118265488042) | Passed |
+| native (ubuntu-24.04, x86_64-unknown-linux-musl) | [118265488047](https://github.com/Leonb830/wordcraft/actions/runs/39312512365/job/118265488047) | Passed |
+
+- Final follow-up changes only clarify the required host filename in setup help and update verification/UI parity documentation; the runtime/tool implementation qualified above is unchanged. The first optional screenshot attempt lacked sandbox GPU access; the same rendering check was rerun with native rendering permission. A fresh full CI run covers the final wording before commit.
+
+- Final wording/parity follow-up verification: `WORDCRAFT_CODEX_AUTH_SHOT=<outputs>/codex-final-setup-help.png cargo test -p wordcraft-ui-egui --lib codex_auth`: exit 0, 1 test passed; rendered screenshot inspected with the explicit filename instruction fully visible. Final `cargo xtask ci`: exit 0, all six gates passed again (2,808 workspace tests passed, 0 failed; 17 WASM crates; 21-crate layer check). Final `cargo check --target wasm32-unknown-unknown -p wordcraft-web`: exit 0. Documentation links and `git diff --check` passed.
+- T0–T11 are now complete in order. Public fork/parent relationship and preserved base ancestry were rechecked; no existing integration path was deleted, no global Codex settings changed, and no upstream PR or release was published. Remaining product limits are documented in the assistant guide: supported 64-bit native targets, pinned runtime plus host/model, single-paragraph selection replacement, session-local request cards/accepted undo, and partial pane localization.
