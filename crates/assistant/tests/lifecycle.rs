@@ -9,7 +9,11 @@ use wordcraft_assistant::{
 fn fixture(mode: &str) -> (tempfile::TempDir, Launch) {
     let temp = tempfile::tempdir().unwrap();
     let binary = temp.path().join(if cfg!(windows) { "codex.exe" } else { "codex" });
-    std::fs::copy(env!("CARGO_BIN_EXE_wordcraft-codex-fixture"), &binary).unwrap();
+    // Avoid a writable executable handle being inherited by another concurrently
+    // starting fixture on Unix (exec can then transiently report ETXTBSY).
+    std::fs::hard_link(env!("CARGO_BIN_EXE_wordcraft-codex-fixture"), &binary)
+        .or_else(|_| std::fs::copy(env!("CARGO_BIN_EXE_wordcraft-codex-fixture"), &binary).map(|_| ()))
+        .unwrap();
     std::fs::write(temp.path().join("mode"), mode).unwrap();
     let launch =
         Launch { binary, home: temp.path().join("home"), cwd: temp.path().join("cwd"), document_bridge: None, timeout: Duration::from_secs(3) };
