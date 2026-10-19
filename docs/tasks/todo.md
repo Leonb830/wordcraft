@@ -266,11 +266,11 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 - Final wording/parity follow-up verification: `WORDCRAFT_CODEX_AUTH_SHOT=<outputs>/codex-final-setup-help.png cargo test -p wordcraft-ui-egui --lib codex_auth`: exit 0, 1 test passed; rendered screenshot inspected with the explicit filename instruction fully visible. Final `cargo xtask ci`: exit 0, all six gates passed again (2,808 workspace tests passed, 0 failed; 17 WASM crates; 21-crate layer check). Final `cargo check --target wasm32-unknown-unknown -p wordcraft-web`: exit 0. Documentation links and `git diff --check` passed.
 - T0–T11 are now complete in order. Public fork/parent relationship and preserved base ancestry were rechecked; no existing integration path was deleted, no global Codex settings changed, and no upstream PR or release was published. Remaining product limits are documented in the assistant guide: supported 64-bit native targets, pinned runtime plus host/model, single-paragraph selection replacement, session-local request cards/accepted undo, and partial pane localization.
 
-### T12 — blank-page and multi-paragraph writing (in progress)
+### T12 — complete (2026-10-19): blank-page and multi-paragraph writing
 
 - [x] Extend tracked proposal application and scoped review/undo to paragraph structure.
 - [x] Add insertion-point sharing and bounded insertion/paragraph MCP tools.
-- [ ] Verify engine, MCP, UI, DOCX, native hosted flow, existing integrations, CI and WASM.
+- [x] Verify engine, MCP, UI, DOCX, native hosted flow, existing integrations, CI and WASM.
 - [x] Update documentation and push the locally verified follow-up.
 
 T12 supersedes the single-paragraph limit recorded in T7/T11. The private catalogue
@@ -344,8 +344,8 @@ document identity/revision, pauses AutoSave and leaves saving to the user.
   read timeout; all catalogue and denied-write assertions remain unchanged.
   Both installed-runtime tests pass locally after the fix. Full local CI also
   passed all six gates again (2,818 tests; 0 failures; 10 opt-in ignores). The
-  Windows x64 qualification rerun must pass before T12 is complete; the production
-  implementation on the five passing platforms is unchanged.
+  Windows x64 rerun subsequently passed every stage at `a36e3c5f2a1279b97a24fcb1966d1e432322d539`;
+  the production implementation on the five passing platforms is unchanged.
 
 | Platform | T12 qualification job | Result |
 | --- | --- | --- |
@@ -354,4 +354,10 @@ document identity/revision, pauses AutoSave and leaves saving to the user.
 | Linux ARM64 | [118295507853](https://github.com/Leonb830/wordcraft/actions/runs/39321229685/job/118295507853) | Passed |
 | macOS Intel | [118295507982](https://github.com/Leonb830/wordcraft/actions/runs/39321229685/job/118295507982) | Passed |
 | macOS Apple silicon | [118295508311](https://github.com/Leonb830/wordcraft/actions/runs/39321229685/job/118295508311) | Passed |
-| Windows x64 | Follow-up run pending | Fixture corrected; awaiting qualification |
+| Windows x64 | [118300959752](https://github.com/Leonb830/wordcraft/actions/runs/39322821998/job/118300959752) | Passed after fixture correction in `a36e3c5` |
+
+- Final completion-documentation gate: `cargo xtask ci` passed all six stages
+  again (2,818 tests passed, 0 failed, 10 opt-in ignores; 21-crate layering and
+  17 WASM crates). Relative documentation links and `git diff --check` passed.
+  The updated native build is open on a fresh blank page, signed in, with sharing
+  off; the user's existing window/document was left intact. All T12 work is complete.

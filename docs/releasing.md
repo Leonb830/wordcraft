@@ -82,3 +82,11 @@ also sends both new tools through the actual private stdio relay and checks that
 they leave the document unchanged until explicit approval. The executed-catalogue
 test expects all eight tools and still denies an unadvertised general writer.
 The T12 checklist records the follow-up native matrix and hosted paragraph checks.
+The five passing targets in [run 39321229685](https://github.com/Leonb830/wordcraft/actions/runs/39321229685)
+qualify production implementation `148caa0`. Windows x64 exposed a test-fixture
+socket-mode race, corrected in `a36e3c5` without changing production code; its
+follow-up passed in [run 39322821998](https://github.com/Leonb830/wordcraft/actions/runs/39322821998).
+Together these checks qualify the T12 implementation on all six native combinations.
+Signed-in blank-page and paragraph replacement checks passed locally, including
+approval, Codex attribution, scoped undo preserving human revisions, manual DOCX
+save/reopen, actual application restart and conversation resume with sharing off.
