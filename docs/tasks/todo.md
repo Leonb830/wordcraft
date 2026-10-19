@@ -61,10 +61,10 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
   - [x] Add disable/clear-reference controls and verify logs exclude content/secrets.
   - **Checkpoint:** signed-out, expired-auth, resume, and clear states work.
 
-- [ ] **T9 — Complete runtime distribution and platform behavior** (4–8 h; depends on T1, T5, T8)
-  - [ ] Implement runtime packaging or discovery decision for supported native platforms.
-  - [ ] Keep unsupported targets usable and the WASM build intact.
-  - [ ] Add package/version checks and actionable recovery instructions.
+- [x] **T9 — Complete runtime distribution and platform behavior** (4–8 h; depends on T1, T5, T8)
+  - [x] Implement runtime packaging or discovery decision for supported native platforms.
+  - [x] Keep unsupported targets usable and the WASM build intact.
+  - [x] Add package/version checks and actionable recovery instructions.
   - **Checkpoint:** native support matrix is verified and `cargo xtask wasm` passes.
 
 ## Release
@@ -210,7 +210,7 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 
 - User completed browser sign-in in the separate WordCraft profile. Native control status confirms signedIn=true. Hosted turn returned the exact requested synthetic sentence; native screenshot `codex-live-auth.png` inspected. Disabled/restarted the real runtime, then resumed the same persisted thread: two messages restored, signedIn=true, sharing off. No credentials were read or copied. T8 is now complete; the earlier pending note is superseded.
 
-### T9 — native qualification in progress (2026-10-18)
+### T9 — complete (2026-10-19)
 
 - Installed-runtime distribution remains the chosen strategy. Connection settings now links to the exact release, explains extraction/full executable path and says WordCraft never installs/upgrades it. Unsupported OS/CPU targets retain editing with an unavailable message. Flatpak retains its existing sandbox and explains why a native package/AppImage is needed for Codex.
 - `WORDCRAFT_CODEX_BINARY=/opt/homebrew/bin/codex cargo test -p wordcraft --test codex_platform -- --ignored`: exit 0, actual macOS arm64 window/runtime/thread/sharing/edit/disconnect/close smoke passed.
@@ -222,3 +222,7 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 - First Windows jobs stopped during test-runtime extraction: GNU tar interpreted `D:` as a remote host. Qualification workflow now uses relative archive paths and converts Windows executable paths explicitly. Windows-only rerun is required; macOS/Linux jobs continue. Workflow dispatch accepts a target subset so fixing infrastructure does not repeat unaffected builds.
 - Follow-up on 2026-10-19: original macOS/Linux jobs built successfully and passed the actual runtime document relay. Window-smoke failures revealed a harness path serialized as an `OsString` rather than a JSON path string; corrected to `PathBuf` with explicit assertions. Windows preference test used a Unix-only absolute fixture path; replaced it with the platform temporary directory. Corrected tests pass locally (2 settings tests, 1 native smoke).
 - Linux window startup exited before control initialization. Added captured startup diagnostics, software Vulkan/XKB dependencies and a session bus to the Xvfb harness; its remote result remains required. Added Windows USERPROFILE to runtime/settings isolation checks and removed a platform-dependent unused-mut warning. CI caches now survive failures to avoid rebuilding all dependencies during qualification. Full CI still fails on the recorded baseline lints.
+- macOS arm64 qualification is now fully green in run 39292033977 (job 118194888780): lifecycle/preferences, actual installed-runtime relay, and native window smoke. Other platform results are still pending.
+- Windows arm64 (job 118194888650) and Linux x86_64 (job 118194888726) are fully green in run 39292033977. Linux arm64 is fully green in rerun https://github.com/Leonb830/wordcraft/actions/runs/39292682956 (job 118197108457). Each includes the actual native-window smoke, private document relay, lifecycle and preference checks. The fixture hard-link regression passes locally (2 unit + 8 integration tests); it changes only test setup. Windows x86_64 and macOS Intel are still pending.
+
+- Final matrix verified on 2026-10-19: Windows x86_64 (118194888603) and macOS Intel (118194888691) also succeeded. All six combinations now pass lifecycle/preferences, installed-runtime private relay, and native window checks. Five jobs are in [run 39292033977](https://github.com/Leonb830/wordcraft/actions/runs/39292033977); Linux ARM passes in [rerun 39292682956](https://github.com/Leonb830/wordcraft/actions/runs/39292682956). The first run's failed Linux ARM fixture job is superseded, not represented as a passing run. T9 is complete; T10 may now begin.
