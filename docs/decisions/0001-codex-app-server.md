@@ -1,7 +1,7 @@
 # ADR 0001: Add a native Codex assistant
 
 Date: 2026-10-16
-Status: Accepted architecture; Codex 0.162.1 protocol qualified by T1 (local mock inference)
+Status: Accepted architecture; extended 2026-10-19 for approved paragraph drafting (T12)
 Owner: the WordCraft fork maintainer (Leonb830); implementation and verification are recorded in `docs/tasks/todo.md`.
 
 ## Base and reconciliation (T0)
@@ -100,6 +100,7 @@ https://learn.chatgpt.com/docs/app-server
 
 | Date | Change |
 | --- | --- |
+| 2026-10-19 | T12: add captured insertion-point consent and paragraph proposals while preserving explicit approval, attribution and scoped undo. |
 | 2026-10-16 | T0: reconciled main and both unmerged PRs; selected additive native app-server architecture and installed-runtime/auth defaults. |
 
 T1 qualification: see [compatibility matrix](../tasks/codex-spike/README.md). The supported version is exactly 0.162.1 until another version is qualified. Managed browser auth start/cancel and isolated sign-out work. Hosted inference with the dedicated profile remains a product integration check.
@@ -183,3 +184,23 @@ Official pinned implementation inspected: `core/src/tools/mod.rs` (model mode),
 The user guide and platform workflow require the sibling host. Future runtime/model
 changes must pass executed-catalogue and hosted approved-edit checks. Model IDs
 are availability-dependent, not immutable model-weight snapshots.
+
+## T12 blank-page and multi-paragraph proposals (2026-10-19)
+
+The user requested blank-page drafting and edits across multiple paragraphs.
+Superseding T7's single-paragraph limit, the closed catalogue now has eight tools:
+five reads and three preview-only proposals. `propose_insertion` uses the captured
+caret, `propose_selection` replaces the captured range, and `propose_paragraphs`
+uses inclusive body block indices from explicit document sharing. Caret sharing
+does not disclose surrounding text. A later caret move never retargets a request.
+
+One proposal per turn remains the limit, with 64 KiB of replacement text and at
+most 1,024 paragraphs. Newlines become actual paragraphs. Approval tracks inserted
+and deleted paragraph marks under the same Codex request IDs as their text. The
+engine prepares changes before one checkpoint; scoped accept/reject/undo resolves
+only those IDs and structural marks. Accepted undo compares the affected range
+including paragraph revisions, refusing overlap and preserving edits elsewhere.
+Objects, protected content, content controls, intervening section boundaries and
+overlapping tracked revisions remain unsupported. DOCX retains both text and
+paragraph-mark attribution. Approval, manual save and the private runtime boundary
+are unchanged; no new general command or write capability is exposed.

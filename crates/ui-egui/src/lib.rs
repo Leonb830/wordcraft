@@ -1358,7 +1358,7 @@ impl WordApp {
                 self.assistant.actions.push_back(action);
                 json!({"queued":true})
             }
-            "ui.assistantShareSelection" | "ui.assistantShareDocument" | "ui.assistantRevoke" => {
+            "ui.assistantShareCaret" | "ui.assistantShareSelection" | "ui.assistantShareDocument" | "ui.assistantRevoke" => {
                 if !assistant::runtime_supported() {
                     return Some(Err(assistant::UNAVAILABLE.into()));
                 }
@@ -1366,6 +1366,7 @@ impl WordApp {
                     return Some(Err("Too many pending assistant actions.".into()));
                 }
                 self.assistant.actions.push_back(match id {
+                    "ui.assistantShareCaret" => assistant::Action::ShareCaret,
                     "ui.assistantShareSelection" => assistant::Action::ShareSelection,
                     "ui.assistantShareDocument" => assistant::Action::ShareDocument,
                     _ => assistant::Action::Revoke,

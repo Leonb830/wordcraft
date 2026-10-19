@@ -46,7 +46,7 @@ Choose the archive for your computer:
 | Linux | ARM64 | `codex-aarch64-unknown-linux-musl.tar.gz` |
 | Linux | Intel/AMD 64-bit | `codex-x86_64-unknown-linux-musl.tar.gz` |
 
-Keep both executables in the same folder. The isolated host runs only the six
+Keep both executables in the same folder. The isolated host runs only the eight
 WordCraft document tools; it has no Node, filesystem or network globals.
 Use the executable inside the archive, not the archive itself. On macOS/Linux
 it must have executable permission. If your OS blocks an untrusted download,
@@ -60,12 +60,19 @@ a native package/build or AppImage for Codex; Flatpak permissions are unchanged.
 **Document sharing is off** initially and after starting/resuming a conversation
 or reconnecting. Prompts you type are sent when you click Send, even with sharing off.
 
+- Place the caret on a blank page or between existing characters, then choose
+  **Share insertion point** to let Codex propose text there. This shares the
+  location and typing format without sending surrounding text.
 - Select text in the active document, then choose **Share selection** to permit
-  reads of that captured selection. Moving the caret does not broaden the grant.
-- Choose **Share document** to permit reads of text from the active document.
+  reads and replacement proposals for that captured range, including multiple
+  consecutive plain-text paragraphs. Moving the caret does not change the grant.
+- Choose **Share document** to permit reads and proposals for consecutive body
+  paragraphs. Codex receives paragraph indices and must match their original text.
+  If the captured selection is a caret, insertion there is also available.
 - Check the scope, revision and size indicator at the top of the pane before
   sending. Changing the document makes the captured context stale; share again
-  explicitly to include the new revision. The limit is 256 KiB of shared text.
+  explicitly to include the new revision. The limit is 256 KiB of shared text;
+  whole-document sharing supports up to 1,024 top-level blocks.
 - **Stop sharing** revokes further document reads. Previously sent content
   remains in the conversation. Revocation does not erase it from Codex.
 
@@ -76,17 +83,25 @@ save/export the document, or invoke WordCraft's general MCP command registry.
 
 ## Approve and review edits
 
-To revise text, select a nonempty range **within one plain-text paragraph**, choose
-**Share selection**, and ask for a replacement of that selection. The current edit
-tool only replaces that entire captured range. Whole-document sharing supports
-reading; it does not authorize a whole-document rewrite. Objects, protected text
-and overlapping tracked changes cannot be edited through this tool.
+To draft on a blank page, choose **Share insertion point** and ask, for example,
+“Draft three paragraphs introducing our community garden.” To revise several
+paragraphs, select and share them, or choose **Share document** and identify the
+paragraphs to revise. Paragraph breaks in the proposal become real document
+paragraphs, including empty paragraphs.
 
-The **Codex edits** card shows the original text, proposed text and document
-revision. A proposal alone does not change the document:
+The private MCP tools are `propose_insertion` (captured caret),
+`propose_selection` (entire captured selection), and `propose_paragraphs`
+(consecutive body paragraphs from shared document context). Each turn can queue
+one proposal of up to 64 KiB and 1,024 paragraphs. These tools handle plain text;
+objects, protected text, content controls, intervening section breaks and
+overlapping tracked changes are refused.
+
+The **Codex edits** card shows the insertion location or original text, proposed
+text and document revision. A proposal alone does not change the document:
 
 - **Approve edit** applies it as tracked changes authored by **Codex**, associated
-  with the conversation and request. Approval checks the document revision again.
+  with the conversation and request. This includes inserted or removed paragraph
+  breaks. Approval checks the document revision again.
 - **Deny edit** discards that preview without changing the text.
 - **Accept request** keeps only that request's changes; **Reject request** removes
   only its changes. These actions leave unrelated human revisions alone.
@@ -95,7 +110,7 @@ revision. A proposal alone does not change the document:
   the action refuses to overwrite them.
 
 If the document changed while Codex was preparing an edit, deny the stale preview,
-share the current selection and ask again. Replacement text is limited to 64 KiB.
+share the current context and ask again.
 
 Approval pauses AutoSave and the card tells you to save manually. Use WordCraft's
 normal **Save** or **Save As** when ready; Codex never saves the document. You can
@@ -147,7 +162,7 @@ revisions or request metadata. Disconnecting is not signing out or deleting data
 | Signed out / expired authentication | Use Sign in with ChatGPT, then Check sign-in. Reconnect and resume if necessary; grant context again. |
 | Browser sign-in fails | Cancel the pending flow, close any other pending Codex sign-in, then start a fresh sign-in from WordCraft. Never paste credentials into a conversation. |
 | Runtime stopped / timed out | Use Start / restart Codex, resume the conversation and share again. Editing remains available. |
-| Context stale or proposal refused | Select plain text in one paragraph without existing tracked changes; share the current selection and request a fresh proposal. |
+| Context stale or proposal refused | Share the current insertion point or a plain-text paragraph range without existing tracked changes, objects or section breaks, then request a fresh proposal. |
 | Conversation unavailable | Check that you are using the same WordCraft profile; start a new conversation if the old thread cannot be resumed. |
 | Response too large | Stop and ask for a shorter response. The pane retains up to 100 messages / 1 MiB and at most 256 KiB per displayed response. |
 | Flatpak / unsupported target | Use a supported native build for the assistant; continue editing and saving in the current build. |

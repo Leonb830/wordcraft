@@ -1372,7 +1372,7 @@ struct CodexRequest {
     replacement: String,
     state: &'static str,
     revisions: Option<(u32, u32)>,
-    accepted: Vec<(StoryRef, Path, wordcraft_doc::Paragraph, wordcraft_doc::Paragraph)>,
+    accepted: Option<CodexResolvedRange>,
 }
 
 impl Session {
@@ -1399,8 +1399,8 @@ impl Session {
         if document != self.document_id() || revision != self.rev() {
             return Err(CmdError::Disabled("Document changed; refresh context and propose again.".into()));
         }
-        if text.len() > 64 * 1024 || text.contains(['\n', '\r', wordcraft_doc::para::OBJ]) {
-            return Err(CmdError::Params("Propose plain text within one paragraph, at most 64 KiB.".into()));
+        if text.len() > 64 * 1024 || text.contains(['\r', wordcraft_doc::para::OBJ]) || text.split('\n').count() > 1024 {
+            return Err(CmdError::Params("Propose plain text with at most 64 KiB and 1024 paragraphs.".into()));
         }
         let before = self.codex_target(&selection)?;
         if before == text {
@@ -1416,7 +1416,7 @@ impl Session {
             replacement: text.into(),
             state: "pending",
             revisions: None,
-            accepted: Vec::new(),
+            accepted: None,
         });
         Ok(())
     }
@@ -1426,23 +1426,42 @@ impl Session {
             return Err(CmdError::Disabled("Codex edits are unavailable in protected documents.".into()));
         }
         let (a, b) = selection.ordered();
-        if a.story != b.story || a.path != b.path || !self.doc.control_ranges(a.story).is_empty() {
-            return Err(CmdError::Disabled("Select text within one paragraph without content controls.".into()));
-        }
-        let para = self.doc.para_at(&a).ok_or_else(|| CmdError::Params("Invalid paragraph.".into()))?;
-        if para.text.len() > 256 * 1024 {
-            return Err(CmdError::Disabled("This paragraph is too large for a Codex edit.".into()));
-        }
-        let text = para.text.get(a.off..b.off).ok_or_else(|| CmdError::Params("Invalid text range.".into()))?;
-        if text.len() > 64 * 1024
-            || text.contains(wordcraft_doc::para::OBJ)
-            || para.run_ranges().any(|(range, props)| {
-                range.end > a.off && range.start < b.off && (props.ins.is_some() || props.del.is_some() || props.fmt_change.is_some())
-            })
+        if a.story != b.story
+            || a.path.parent() != b.path.parent()
+            || a.path.0.is_empty()
+            || b.path.0.is_empty()
+            || !self.doc.control_ranges(a.story).is_empty()
         {
-            return Err(CmdError::Disabled("The target contains objects, existing revisions, or too much text.".into()));
+            return Err(CmdError::Disabled("Select contiguous paragraphs in one story/container without content controls.".into()));
         }
-        Ok(text.into())
+        let count = b.path.last().saturating_sub(a.path.last()).saturating_add(1);
+        if count > 1024 {
+            return Err(CmdError::Disabled("Select at most 1024 paragraphs.".into()));
+        }
+        let mut text = String::new();
+        for i in a.path.last()..=b.path.last() {
+            let path = a.path.with_last(i);
+            let para = self.doc.para(a.story, &path).ok_or_else(|| CmdError::Disabled("The range crosses an object or invalid paragraph.".into()))?;
+            let start = if path == a.path { a.off } else { 0 };
+            let end = if path == b.path { b.off } else { para.len() };
+            let part = para.text.get(start..end).ok_or_else(|| CmdError::Params("Invalid text range.".into()))?;
+            let revisions = |p: &CharProps| p.ins.is_some() || p.del.is_some() || p.fmt_change.is_some();
+            if para.len() > 256 * 1024
+                || text.len().saturating_add(part.len()).saturating_add(usize::from(i != a.path.last())) > 64 * 1024
+                || part.contains(wordcraft_doc::para::OBJ)
+                || para.props.fmt_change.is_some()
+                || para.props.num_change.is_some()
+                || (path != b.path && (revisions(&para.mark) || para.section.is_some()))
+                || para.run_ranges().any(|(r, p)| r.end > start && r.start < end && revisions(p))
+            {
+                return Err(CmdError::Disabled("The target contains objects, existing revisions, a section boundary, or too much text.".into()));
+            }
+            if i != a.path.last() {
+                text.push('\n');
+            }
+            text.push_str(part);
+        }
+        Ok(text)
     }
 
     /// Public preview data for the UI; never log or persist this in application settings.
@@ -1453,7 +1472,8 @@ impl Session {
                 .map(|r| {
                     serde_json::json!({
                         "thread":r.thread,"request":r.request,"documentId":r.document,"revision":r.revision,
-                        "before":r.before,"replacement":r.replacement,"state":r.state,"author":"Codex"
+                        "before":r.before,"replacement":r.replacement,"state":r.state,"author":"Codex",
+                        "paragraph":(r.selection.ordered().0.story == StoryRef::Body && r.selection.ordered().0.path.depth() == 0).then(|| r.selection.ordered().0.path.last().saturating_add(1))
                     })
                 })
                 .collect(),
@@ -1482,18 +1502,40 @@ impl Session {
             return Err(CmdError::Disabled("Document changed; deny this proposal and request a fresh one.".into()));
         }
         let (a, b) = r.selection.ordered();
-        let mut para = self.doc.para_at(&a).cloned().ok_or_else(|| CmdError::Params("Invalid paragraph.".into()))?;
         let ins = u32::try_from(self.doc.revisions.len()).map_err(|_| CmdError::Failed("Too many revisions.".into()))?;
         let del = ins.checked_add(1).ok_or_else(|| CmdError::Failed("Too many revisions.".into()))?;
-        let mut props = para.props_at(a.off).formatting();
+        // Work on a copy until every fallible operation has succeeded.
+        let mut doc = self.doc.clone();
+        let mut props = doc.para_at(&a).ok_or_else(|| CmdError::Params("Invalid paragraph.".into()))?.props_at(a.off).formatting();
         props.ins = Some(ins);
         props.del = None;
         props.fmt_change = None;
-        para.format(a.off, b.off, &|p| p.del = Some(del))?;
-        para.insert_text(b.off, &r.replacement, &props)?;
-        // All fallible text work is complete before touching the session or undo stack.
+        for i in a.path.last()..=b.path.last() {
+            let path = a.path.with_last(i);
+            let para = doc.para_mut(a.story, &path)?;
+            let start = if path == a.path { a.off } else { 0 };
+            let end = if path == b.path { b.off } else { para.len() };
+            para.format(start, end, &|p| p.del = Some(del))?;
+            if path != b.path {
+                para.mark.del = Some(del);
+                para.touch();
+            }
+        }
+        let mut at = b.clone();
+        for (i, text) in r.replacement.split('\n').enumerate() {
+            if i > 0 {
+                let mark = doc.para_at(&at).ok_or_else(|| CmdError::Params("Invalid paragraph.".into()))?.mark.clone();
+                let next = doc.split_paragraph(&at)?;
+                let head = doc.para_mut(at.story, &at.path)?;
+                head.mark = props.clone();
+                head.touch();
+                doc.para_mut(next.story, &next.path)?.mark = mark;
+                at = next;
+            }
+            at = doc.insert_text(&at, text, &props)?;
+        }
         self.checkpoint("Codex request");
-        *self.doc.para_mut(a.story, &a.path)? = para;
+        self.doc = doc;
         let date = crate::cmd::now_iso();
         self.doc.revisions.push(wordcraft_doc::Revision::new(wordcraft_doc::RevisionKind::Insert, "Codex", &date));
         self.doc.revisions.push(wordcraft_doc::Revision::new(wordcraft_doc::RevisionKind::Delete, "Codex", &date));
@@ -1532,68 +1574,73 @@ impl Session {
         {
             return Err(CmdError::Disabled("Request revisions are no longer present.".into()));
         }
-        let mut pairs = Vec::new();
+        let owned = |p: &wordcraft_doc::props::CharProps| p.ins == Some(ins) || p.del == Some(del);
+        let mut locations = Vec::new();
         let mut inserted = String::new();
         let mut deleted = String::new();
-        let stories = std::iter::once(StoryRef::Body).chain(self.doc.parts.keys().copied().map(StoryRef::Part)).collect::<Vec<_>>();
-        for story in stories {
+        for story in std::iter::once(StoryRef::Body).chain(self.doc.parts.keys().copied().map(StoryRef::Part)) {
             for path in self.doc.para_paths(story) {
-                let pos = Pos { story, path: path.clone(), off: 0 };
-                let Some(para) = self.doc.para_at(&pos) else { continue };
-                let mut found = false;
-                for (range, p) in para.run_ranges() {
-                    if p.ins == Some(ins) || p.del == Some(del) {
+                let Some(para) = self.doc.para(story, &path) else { continue };
+                let mut found = owned(&para.mark);
+                for (range, props) in para.run_ranges() {
+                    if owned(props) {
                         found = true;
-                        if para.text.len() > 256 * 1024
-                            || (p.ins == Some(ins) && inserted.len().saturating_add(range.len()) > r.replacement.len())
-                            || (p.del == Some(del) && deleted.len().saturating_add(range.len()) > r.before.len())
-                        {
-                            return Err(CmdError::Disabled("Request text changed or exceeded the review limit.".into()));
-                        }
-                        if p.fmt_change.is_some() || (p.ins.is_some() && p.ins != Some(ins)) || (p.del.is_some() && p.del != Some(del)) {
-                            return Err(CmdError::Disabled("Overlapping revisions changed this request; review the overlap manually.".into()));
-                        }
-                        let text = para.text.get(range).ok_or_else(|| CmdError::Failed("Invalid revision range.".into()))?;
-                        if p.ins == Some(ins) {
-                            inserted.push_str(text);
-                        }
-                        if p.del == Some(del) {
-                            deleted.push_str(text);
-                        }
+                        codex_revision_text(
+                            props,
+                            para.text.get(range).ok_or_else(|| CmdError::Failed("Invalid revision range.".into()))?,
+                            ins,
+                            del,
+                            &mut inserted,
+                            &mut deleted,
+                        )?;
                     }
                 }
+                if owned(&para.mark) {
+                    codex_revision_text(&para.mark, "\n", ins, del, &mut inserted, &mut deleted)?;
+                }
                 if found {
+                    if para.props.fmt_change.is_some() || para.props.num_change.is_some() || (owned(&para.mark) && para.section.is_some()) {
+                        return Err(CmdError::Disabled("Paragraph formatting or section boundaries changed; review the overlap manually.".into()));
+                    }
                     if !self.doc.control_ranges(story).is_empty() {
                         return Err(CmdError::Disabled("Content controls changed; review this request manually.".into()));
                     }
-                    pairs.push((story, path, codex_resolved_para(para, ins, del, true)?, codex_resolved_para(para, ins, del, false)?));
+                    locations.push((story, path.clone()));
+                    // Resolving a marked boundary may join the following paragraph.
+                    if owned(&para.mark) {
+                        locations.push((story, path.with_last(path.last().saturating_add(1))));
+                    }
                 }
             }
         }
-        if pairs.is_empty() && action == "undo" && r.state == "accepted" && !r.accepted.is_empty() {
-            // Accept has removed our tags. Only invert unchanged affected paragraphs; never
-            // overwrite later user edits or guess after paragraph movement/ambiguous content.
-            for (story, path, accepted, _) in &r.accepted {
-                if !self.doc.control_ranges(*story).is_empty() {
-                    return Err(CmdError::Disabled("Content controls changed; review this request manually.".into()));
-                }
-                if self.doc.para_at(&Pos { story: *story, path: path.clone(), off: 0 }) != Some(accepted) {
-                    return Err(CmdError::Disabled("The accepted text changed; scoped undo would overlap newer work.".into()));
-                }
+        let resolved = if locations.is_empty() && action == "undo" && r.state == "accepted" {
+            let saved = r.accepted.as_ref().ok_or_else(|| CmdError::Disabled("No accepted request to undo.".into()))?;
+            if !self.doc.control_ranges(saved.story).is_empty() {
+                return Err(CmdError::Disabled("Content controls changed; review this request manually.".into()));
             }
-            for (story, path, _, rejected) in &r.accepted {
-                let target = self.doc.para_mut(*story, path)?;
-                *target = rejected.clone();
-                target.touch();
+            let current = codex_paragraphs(&self.doc, saved.story, &saved.path, saved.accepted.len())?;
+            if current.iter().zip(&saved.accepted).any(|(a, b)| a != b || a.rev != b.rev) {
+                return Err(CmdError::Disabled("The accepted text changed; scoped undo would overlap newer work.".into()));
             }
+            codex_replace_paragraphs(&mut self.doc, saved.story, &saved.path, saved.accepted.len(), &saved.rejected)?;
+            None
         } else {
-            if pairs.is_empty() || inserted != r.replacement || deleted != r.before {
+            if locations.is_empty() || inserted != r.replacement || deleted != r.before {
                 return Err(CmdError::Disabled("Request text changed or was already resolved; review it manually.".into()));
             }
-            for (story, path, accepted, rejected) in &pairs {
-                *self.doc.para_mut(*story, path)? = if action == "accept" { accepted.clone() } else { rejected.clone() };
+            locations.sort();
+            let (story, first) = locations.first().cloned().ok_or_else(|| CmdError::Failed("Missing request range.".into()))?;
+            if locations.iter().any(|(s, p)| *s != story || p.parent() != first.parent()) {
+                return Err(CmdError::Disabled("Request paragraphs moved between containers.".into()));
             }
-        }
+            let end = locations.last().map(|(_, p)| p.last()).unwrap_or(first.last());
+            let count = end.saturating_sub(first.last()).saturating_add(1);
+            let paragraphs = codex_paragraphs(&self.doc, story, &first, count)?;
+            let accepted = codex_resolved_paragraphs(&paragraphs, ins, del, true)?;
+            let rejected = codex_resolved_paragraphs(&paragraphs, ins, del, false)?;
+            codex_replace_paragraphs(&mut self.doc, story, &first, count, if action == "accept" { &accepted } else { &rejected })?;
+            Some(CodexResolvedRange { story, path: first, accepted, rejected })
+        };
         if let Some(r) = self.codex_requests.get_mut(index) {
             r.state = match action {
                 "accept" => "accepted",
@@ -1601,11 +1648,97 @@ impl Session {
                 _ => "rejected",
             };
             if action == "accept" {
-                r.accepted = pairs;
+                r.accepted = resolved;
             }
         }
         Ok(serde_json::json!({"request":request,"action":action}))
     }
+}
+
+#[derive(Clone)]
+struct CodexResolvedRange {
+    story: StoryRef,
+    path: Path,
+    accepted: Vec<wordcraft_doc::Paragraph>,
+    rejected: Vec<wordcraft_doc::Paragraph>,
+}
+
+fn codex_paragraphs(doc: &Document, story: StoryRef, path: &Path, count: usize) -> Result<Vec<wordcraft_doc::Paragraph>, CmdError> {
+    if count == 0 || count > 2048 {
+        return Err(CmdError::Disabled("Request paragraph limit exceeded.".into()));
+    }
+    let mut out = Vec::new();
+    let mut bytes = 0usize;
+    for i in path.last()..path.last().saturating_add(count) {
+        let p = doc.para(story, &path.with_last(i)).ok_or_else(|| CmdError::Disabled("Request paragraphs changed.".into()))?;
+        bytes = bytes.saturating_add(p.text.len());
+        if bytes > 1024 * 1024 {
+            return Err(CmdError::Disabled("Request review size limit exceeded.".into()));
+        }
+        out.push(p.clone());
+    }
+    Ok(out)
+}
+
+fn codex_replace_paragraphs(
+    doc: &mut Document,
+    story: StoryRef,
+    path: &Path,
+    count: usize,
+    paragraphs: &[wordcraft_doc::Paragraph],
+) -> Result<(), CmdError> {
+    let blocks = doc.container_mut(story, path)?;
+    let end = path.last().checked_add(count).filter(|end| *end <= blocks.len()).ok_or_else(|| CmdError::Params("Invalid request range.".into()))?;
+    if paragraphs.is_empty() {
+        return Err(CmdError::Params("Empty request range.".into()));
+    }
+    blocks.splice(path.last()..end, paragraphs.iter().cloned().map(wordcraft_doc::para_block));
+    Ok(())
+}
+
+fn codex_revision_text(props: &CharProps, text: &str, ins: u32, del: u32, inserted: &mut String, deleted: &mut String) -> Result<(), CmdError> {
+    if props.fmt_change.is_some() || props.ins.is_some_and(|v| v != ins) || props.del.is_some_and(|v| v != del) {
+        return Err(CmdError::Disabled("Overlapping revisions changed this request; review the overlap manually.".into()));
+    }
+    if inserted.len().saturating_add(text.len()) > 128 * 1024 || deleted.len().saturating_add(text.len()) > 128 * 1024 {
+        return Err(CmdError::Disabled("Request text exceeded the review limit.".into()));
+    }
+    if props.ins == Some(ins) {
+        inserted.push_str(text);
+    }
+    if props.del == Some(del) {
+        deleted.push_str(text);
+    }
+    Ok(())
+}
+
+fn codex_resolved_paragraphs(
+    paragraphs: &[wordcraft_doc::Paragraph],
+    ins: u32,
+    del: u32,
+    accept: bool,
+) -> Result<Vec<wordcraft_doc::Paragraph>, CmdError> {
+    let mut out: Vec<wordcraft_doc::Paragraph> = Vec::new();
+    for para in paragraphs.iter().rev() {
+        let mut p = codex_resolved_para(para, ins, del, accept)?;
+        let join = (accept && p.mark.del == Some(del)) || (!accept && p.mark.ins == Some(ins));
+        if p.mark.ins == Some(ins) {
+            p.mark.ins = None;
+        }
+        if p.mark.del == Some(del) {
+            p.mark.del = None;
+        }
+        p.touch();
+        if join {
+            let tail = out.pop().ok_or_else(|| CmdError::Disabled("Request paragraph boundary changed.".into()))?;
+            let mark = tail.mark.clone();
+            p.append(tail);
+            p.mark = mark;
+        }
+        out.push(p);
+    }
+    out.reverse();
+    Ok(out)
 }
 
 fn codex_resolved_para(para: &wordcraft_doc::Paragraph, ins: u32, del: u32, accept: bool) -> Result<wordcraft_doc::Paragraph, CmdError> {
@@ -1644,6 +1777,116 @@ mod codex_tests {
     }
     fn review(s: &mut Session, id: &str, command: &str) {
         s.run(command, &json!({"request":id})).unwrap();
+    }
+    #[test]
+    fn codex_paragraph_changes_round_trip_docx_with_authorship_and_review() {
+        for original in ["", "Old first\nOld second"] {
+            let mut s = Session::new(Document::from_text(original));
+            s.run("select.all", &json!({})).unwrap();
+            s.propose_codex("thread", "docx", s.document_id(), s.rev(), s.sel.clone(), "Café first\n\nLast paragraph").unwrap();
+            s.approve_codex("docx").unwrap();
+            let bytes = wordcraft_docx::write(&s.doc).unwrap();
+            let doc = wordcraft_docx::read(&bytes).unwrap();
+            assert!(doc.custom_prop("WordCraft.Codex.Request.docx").is_some());
+            assert!(doc.revisions.iter().all(|r| r.author == "Codex"));
+            assert!(doc.body.iter().filter_map(|b| b.as_para()).any(|p| p.mark.ins.is_some()));
+            for accept in [true, false] {
+                let mut reopened = Session::new(doc.clone());
+                reopened.run(if accept { "review.acceptAll" } else { "review.rejectAll" }, &json!({})).unwrap();
+                assert_eq!(reopened.doc.final_text(StoryRef::Body), if accept { "Café first\n\nLast paragraph" } else { original });
+            }
+        }
+    }
+    #[test]
+    fn codex_structural_undo_preserves_later_human_work_and_refuses_changed_range() {
+        let mut s = Session::new(Document::from_text("Old first\nOld second\nOutside"));
+        s.propose_codex(
+            "thread",
+            "structure",
+            s.document_id(),
+            s.rev(),
+            Selection { anchor: Pos::body(0, 0), focus: Pos::body(1, 10) },
+            "New first\nNew middle\nNew last",
+        )
+        .unwrap();
+        s.approve_codex("structure").unwrap();
+        review(&mut s, "structure", "review.acceptCodex");
+        s.run("select.text", &json!({"text":"Outside"})).unwrap();
+        s.run("text.insert", &json!({"text":"Later human"})).unwrap();
+        review(&mut s, "structure", "review.rejectCodexUndo");
+        assert_eq!(s.doc.final_text(StoryRef::Body), "Old first\nOld second\nLater human");
+        s.run("select.text", &json!({"text":"Old first"})).unwrap();
+        s.propose_codex("thread", "overlap", s.document_id(), s.rev(), s.sel.clone(), "New one\nNew two").unwrap();
+        s.approve_codex("overlap").unwrap();
+        review(&mut s, "overlap", "review.acceptCodex");
+        s.run("select.text", &json!({"text":"New two"})).unwrap();
+        s.run("text.insert", &json!({"text":"Human rewrite"})).unwrap();
+        let before = s.doc.clone();
+        assert!(s.run("review.rejectCodexUndo", &json!({"request":"overlap"})).is_err());
+        assert_eq!(s.doc, before);
+    }
+    #[test]
+    fn codex_multiline_guards_refuse_stale_revised_and_excessive_ranges() {
+        let mut s = Session::new(Document::from_text("First\nSecond"));
+        s.run("select.all", &json!({})).unwrap();
+        let all = s.sel.clone();
+        assert!(s.propose_codex("thread", "big", s.document_id(), s.rev(), all.clone(), &"x".repeat(65537)).is_err());
+        assert!(s.propose_codex("thread", "many", s.document_id(), s.rev(), all.clone(), &"\n".repeat(1024)).is_err());
+        assert!(s.propose_codex("thread", "utf8", s.document_id(), s.rev(), Selection::caret(Pos::body(0, 999)), "Draft").is_err());
+        s.propose_codex("thread", "stale", s.document_id(), s.rev(), all, "New first\nNew second").unwrap();
+        s.run("text.insert", &json!({"text":"Human"})).unwrap();
+        let before = s.doc.clone();
+        assert!(s.approve_codex("stale").is_err());
+        assert_eq!(s.doc, before);
+        s.run("review.trackChanges", &json!({"value":true})).unwrap();
+        s.run("text.newParagraph", &json!({})).unwrap();
+        s.run("select.all", &json!({})).unwrap();
+        assert!(s.propose_codex("thread", "revised", s.document_id(), s.rev(), s.sel.clone(), "Overwrite").is_err());
+    }
+    #[test]
+    fn codex_multi_paragraph_review_preserves_human_changes_and_boundaries() {
+        for command in ["review.acceptCodex", "review.rejectCodex", "review.rejectCodexUndo"] {
+            let mut s = Session::new(Document::from_text("Lead old first\nold second tail\nHuman note"));
+            s.run("review.trackChanges", &json!({"value":true})).unwrap();
+            s.run("select.text", &json!({"text":"note"})).unwrap();
+            s.run("text.insert", &json!({"text":"revision"})).unwrap();
+            let human = s.doc.para_at(&Pos::body(2, 0)).unwrap().clone();
+            let selection = Selection { anchor: Pos::body(0, 5), focus: Pos::body(1, 10) };
+            s.propose_codex("thread", "multi", s.document_id(), s.rev(), selection, "New one\nNew two\nNew three").unwrap();
+            let before = s.doc.clone();
+            s.approve_codex("multi").unwrap();
+            s.run("edit.undo", &json!({})).unwrap();
+            assert_eq!(s.doc, before, "one undo includes every paragraph change");
+            s.run("edit.redo", &json!({})).unwrap();
+            review(&mut s, "multi", command);
+            if command == "review.acceptCodex" {
+                assert_eq!(s.doc.final_text(StoryRef::Body), "Lead New one\nNew two\nNew three tail\nHuman revision");
+                review(&mut s, "multi", "review.rejectCodexUndo");
+            }
+            assert_eq!(s.doc.final_text(StoryRef::Body), "Lead old first\nold second tail\nHuman revision");
+            assert_eq!(s.doc.body.len(), 3);
+            assert_eq!(s.doc.para_at(&Pos::body(2, 0)), Some(&human));
+        }
+    }
+    #[test]
+    fn codex_blank_page_draft_creates_real_paragraphs_and_can_be_undone() {
+        for command in ["review.acceptCodex", "review.rejectCodex", "review.rejectCodexUndo"] {
+            let mut s = Session::new(Document::new());
+            let original = s.doc.clone();
+            s.propose_codex("thread", "draft", s.document_id(), s.rev(), s.sel.clone(), "First paragraph.\n\nThird paragraph.").unwrap();
+            assert_eq!(s.doc, original, "a proposal is only a preview");
+            s.approve_codex("draft").unwrap();
+            assert_eq!(s.doc.body.len(), 3, "newlines create paragraphs, including empty ones");
+            assert_eq!(s.doc.final_text(StoryRef::Body), "First paragraph.\n\nThird paragraph.");
+            assert!(s.doc.revisions.iter().all(|r| r.author == "Codex"));
+            review(&mut s, "draft", command);
+            if command == "review.acceptCodex" {
+                assert_eq!(s.doc.final_text(StoryRef::Body), "First paragraph.\n\nThird paragraph.");
+                review(&mut s, "draft", "review.rejectCodexUndo");
+            }
+            assert_eq!(s.doc.body.len(), 1);
+            assert_eq!(s.doc.final_text(StoryRef::Body), "");
+        }
     }
     #[test]
     fn codex_approval_is_explicit_and_duplicate_proposals_cannot_replay() {
@@ -1755,10 +1998,9 @@ mod codex_tests {
     #[test]
     fn codex_invalid_targets_are_refused() {
         let mut s = sample();
-        s.run("select.all", &json!({})).unwrap();
+        s.sel = Selection { anchor: Pos::body(0, 0), focus: Pos::body(99, 0) };
         assert!(s.propose_codex("thread", "r1", s.document_id(), s.rev(), s.sel.clone(), "replacement").is_err());
         s.run("select.text", &json!({"text":"Original"})).unwrap();
-        assert!(s.propose_codex("thread", "r1", s.document_id(), s.rev(), s.sel.clone(), "two\nparagraphs").is_err());
         s.doc.settings.protection = Some("readOnly".into());
         assert!(s.propose_codex("thread", "r1", s.document_id(), s.rev(), s.sel.clone(), "replacement").is_err());
     }

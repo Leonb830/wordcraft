@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 use std::io::{BufReader, Write};
 use wordcraft_assistant::native::read_message;
-use wordcraft_mcp::codex_profile::{PROPOSAL_TOOL, READ_TOOLS, assistant_tool_definitions};
+use wordcraft_mcp::codex_profile::{PROPOSAL_TOOLS, READ_TOOLS, assistant_tool_definitions};
 use wordcraft_mcp::tools::ToolResult;
 fn send(output: &mut impl Write, value: Value) -> Result<(), Box<dyn std::error::Error>> {
     serde_json::to_writer(&mut *output, &value)?;
@@ -39,7 +39,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             "tools/call" if initialized => {
                 let params = message.get("params").unwrap_or(&Value::Null);
                 let name = params.get("name").and_then(Value::as_str).unwrap_or("");
-                if !READ_TOOLS.contains(&name) && name != PROPOSAL_TOOL {
+                if !READ_TOOLS.contains(&name) && !PROPOSAL_TOOLS.contains(&name) {
                     ToolResult::error("Tool is not on the WordCraft Codex allowlist.").to_value()
                 } else {
                     let elicitation = format!("wordcraft-{next}");

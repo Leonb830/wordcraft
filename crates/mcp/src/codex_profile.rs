@@ -2,20 +2,25 @@
 //! The broad MCP Server and Backend registry are intentionally not used by this profile.
 use crate::tools::ToolResult;
 use serde_json::{Value, json};
-use wordcraft_doc::StoryRef;
+use wordcraft_doc::{Pos, StoryRef};
 use wordcraft_engine::{Selection, Session};
 
 pub const MAX_CONTEXT: usize = 256 * 1024;
 pub const PROPOSAL_TOOL: &str = "propose_selection";
+pub const INSERTION_TOOL: &str = "propose_insertion";
+pub const PARAGRAPHS_TOOL: &str = "propose_paragraphs";
+pub const PROPOSAL_TOOLS: &[&str] = &[PROPOSAL_TOOL, INSERTION_TOOL, PARAGRAPHS_TOOL];
 pub const READ_TOOLS: &[&str] = &["context_status", "read_context", "read_selection", "find_text", "inspect_formatting"];
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Scope {
+    Caret,
     Selection,
     Document,
 }
 impl Scope {
     pub fn name(self) -> &'static str {
         match self {
+            Self::Caret => "insertion point",
             Self::Selection => "selection",
             Self::Document => "document",
         }
@@ -30,6 +35,7 @@ pub struct SharedContext {
     text: String,
     selected: String,
     format: Value,
+    paragraphs: Vec<(usize, String)>,
 }
 impl SharedContext {
     /// Only the host's explicit share action calls this. No protocol tool can grant consent.
@@ -40,10 +46,17 @@ impl SharedContext {
         if scope == Scope::Selection && session.sel.is_collapsed() {
             return Err("Select text before sharing a selection.".into());
         }
+        if scope == Scope::Caret && !session.sel.is_collapsed() {
+            return Err("Place the caret where Codex should insert text, then share the insertion point.".into());
+        }
         let selected = session.selected_text();
         let text = match scope {
+            Scope::Caret => String::new(),
             Scope::Selection => selected.clone(),
             Scope::Document => {
+                if session.doc.body.len() > 1024 {
+                    return Err("Document has too many blocks; share a selection instead.".into());
+                }
                 let mut text = session.doc.final_text(StoryRef::Body);
                 for id in session.doc.parts.keys() {
                     if text.len() > MAX_CONTEXT {
@@ -66,10 +79,15 @@ impl SharedContext {
             text,
             selected,
             format: serde_json::to_value(session.typing_props()).map_err(|_| "Unable to inspect formatting.")?,
+            paragraphs: if scope == Scope::Document {
+                session.doc.body.iter().enumerate().filter_map(|(i, b)| b.as_para().map(|p| (i, p.final_text()))).collect()
+            } else {
+                Vec::new()
+            },
         })
     }
     pub fn metadata(&self) -> Value {
-        json!({"documentId":self.document_id,"revision":self.revision,"scope":self.scope.name(),"bytes":self.text.len()})
+        json!({"documentId":self.document_id,"revision":self.revision,"scope":self.scope.name(),"bytes":self.text.len(),"canInsert":self.selection.is_collapsed(),"canReplaceSelection":!self.selection.is_collapsed(),"canEditParagraphs":self.scope == Scope::Document})
     }
     pub fn is_current(&self, session: &Session) -> bool {
         self.document_id == session.document_id() && self.revision == session.rev()
@@ -107,7 +125,9 @@ impl CodexProfile {
             return ToolResult::error("Document identity or revision does not match the shared context.");
         }
         let payload = match name {
-            "read_context" => json!({"context":context.metadata(),"text":context.text}),
+            "read_context" => {
+                json!({"context":context.metadata(),"text":context.text,"paragraphs":context.paragraphs.iter().map(|(index,text)| json!({"index":index,"text":text})).collect::<Vec<_>>()})
+            }
             "read_selection" => json!({"context":context.metadata(),"text":context.selected}),
             "inspect_formatting" => json!({"context":context.metadata(),"format":context.format}),
             "find_text" => {
@@ -126,28 +146,71 @@ impl CodexProfile {
         };
         ToolResult::json(&payload)
     }
-    /// Creates a preview only. The protocol cannot approve, apply, accept, reject or save it.
+    /// Backwards-compatible selection preview entry point.
     pub fn propose(&self, session: &mut Session, thread: &str, request: &str, args: &Value) -> ToolResult {
-        let Some(context) = &self.shared else { return ToolResult::error("Share a selection before proposing an edit.") };
+        self.propose_tool(session, thread, request, PROPOSAL_TOOL, args)
+    }
+    /// Creates a preview only. The protocol cannot approve, apply, accept, reject or save it.
+    pub fn propose_tool(&self, session: &mut Session, thread: &str, request: &str, tool: &str, args: &Value) -> ToolResult {
+        if !PROPOSAL_TOOLS.contains(&tool) {
+            return ToolResult::error("Tool is not on the WordCraft Codex allowlist.");
+        }
+        let Some(context) = &self.shared else {
+            return ToolResult::error("Share an insertion point, selection or document before proposing an edit.");
+        };
         if !context.is_current(session)
             || args.get("documentId").and_then(Value::as_u64) != Some(context.document_id)
             || args.get("revision").and_then(Value::as_u64) != Some(context.revision)
         {
             return ToolResult::error("Document context changed; ask the user to share again.");
         }
-        if context.selection.is_collapsed() || context.selected.is_empty() {
-            return ToolResult::error("Select text within one paragraph and share it before proposing an edit.");
+        let (selection, original) = match tool {
+            INSERTION_TOOL => {
+                if !context.selection.is_collapsed() || context.scope == Scope::Selection {
+                    return ToolResult::error("Share a collapsed insertion point or document before inserting text.");
+                }
+                (context.selection.clone(), String::new())
+            }
+            PARAGRAPHS_TOOL => {
+                if context.scope != Scope::Document {
+                    return ToolResult::error("Paragraph editing requires explicit document sharing.");
+                }
+                let index = |key: &str| args.get(key).and_then(Value::as_u64).and_then(|n| usize::try_from(n).ok());
+                let (Some(start), Some(end)) = (index("startParagraph"), index("endParagraph")) else {
+                    return ToolResult::error("Provide startParagraph and endParagraph indices from read_context.");
+                };
+                if start > end || end.saturating_sub(start) >= 1024 {
+                    return ToolResult::error("Invalid paragraph range.");
+                }
+                let rows = context.paragraphs.iter().filter(|(i, _)| *i >= start && *i <= end).collect::<Vec<_>>();
+                if rows.len() != end - start + 1 {
+                    return ToolResult::error("The range must contain only consecutive shared text paragraphs.");
+                }
+                let original = rows.iter().map(|(_, text)| text.as_str()).collect::<Vec<_>>().join("\n");
+                let Some(last) = session.doc.para_at(&Pos::body(end, 0)) else { return ToolResult::error("Paragraph range changed.") };
+                (Selection { anchor: Pos::body(start, 0), focus: Pos::body(end, last.len()) }, original)
+            }
+            _ => {
+                if context.selection.is_collapsed() || context.selected.is_empty() || context.scope == Scope::Caret {
+                    return ToolResult::error(
+                        "Share a nonempty selection before replacing it, or use propose_insertion at a shared insertion point.",
+                    );
+                }
+                (context.selection.clone(), context.selected.clone())
+            }
+        };
+        if tool != INSERTION_TOOL && args.get("original").and_then(Value::as_str) != Some(original.as_str()) {
+            return ToolResult::error("The original text must exactly match the shared range, with newlines between paragraphs.");
         }
-        if args.get("original").and_then(Value::as_str) != Some(context.selected.as_str()) {
-            return ToolResult::error("The original text must exactly match the shared selection.");
-        }
-        let Some(text) = args.get("replacement").and_then(Value::as_str) else { return ToolResult::error("Provide replacement text.") };
-        match session.propose_codex(thread, request, context.document_id, context.revision, context.selection.clone(), text) {
+        let Some(text) = args.get("replacement").and_then(Value::as_str) else {
+            return ToolResult::error("Provide replacement text; newlines create paragraphs.");
+        };
+        match session.propose_codex(thread, request, context.document_id, context.revision, selection, text) {
             Ok(()) => ToolResult::json(
                 &json!({"request":request,"status":"awaiting_user_approval","applied":false,"message":"The user must approve the preview in WordCraft. No document text has changed."}),
             ),
             Err(_) => ToolResult::error(
-                "The proposal cannot be queued. Use one plain-text edit to the shared selection per turn; avoid protected text, objects, existing revisions and stale context.",
+                "The proposal cannot be queued. Use one plain-text proposal per turn, at most 64 KiB and 1024 paragraphs; avoid protected text, objects, existing revisions, section boundaries and stale context.",
             ),
         }
     }
@@ -197,12 +260,35 @@ pub fn tool_definitions() -> Value {
     }).collect())
 }
 
-/// Native assistant relay adds one preview tool to the read-only profile. There is no apply tool.
+/// The native relay adds only preview tools. No tool can apply or approve a change.
 pub fn assistant_tool_definitions() -> Value {
     let mut tools = tool_definitions().as_array().cloned().unwrap_or_default();
-    tools.push(json!({"name":PROPOSAL_TOOL,"description":"Propose one plain-text replacement of the entire originally shared selection, within one paragraph. Read read_selection first. This only queues a preview; the user must approve in WordCraft. Never claim it is applied or saved. One proposal per turn.",
-        "inputSchema":{"type":"object","properties":{"documentId":{"type":"integer"},"revision":{"type":"integer"},"original":{"type":"string","maxLength":65536},"replacement":{"type":"string","maxLength":65536}},"required":["documentId","revision","original","replacement"],"additionalProperties":false},
-        "annotations":{"readOnlyHint":false,"destructiveHint":false,"openWorldHint":false}}));
+    for name in PROPOSAL_TOOLS {
+        let mut properties = json!({"documentId":{"type":"integer"},"revision":{"type":"integer"},"replacement":{"type":"string","maxLength":65536}});
+        let mut required = vec!["documentId", "revision", "replacement"];
+        if *name != INSERTION_TOOL {
+            properties["original"] = json!({"type":"string","maxLength":65536});
+            required.push("original");
+        }
+        let description = match *name {
+            INSERTION_TOOL => {
+                "Propose inserting text at the originally shared insertion point, including a blank page. Requires canInsert=true from context_status. Later caret movement does not change the target."
+            }
+            PARAGRAPHS_TOOL => {
+                for key in ["startParagraph", "endParagraph"] {
+                    properties[key] = json!({"type":"integer","minimum":0});
+                    required.push(key);
+                }
+                "Propose replacing consecutive body paragraphs identified by inclusive startParagraph/endParagraph indices from read_context. Requires document sharing. Original must equal their text joined by newlines."
+            }
+            _ => {
+                "Propose replacing the entire originally shared nonempty selection, including a range across paragraphs. Read read_selection first and copy its original text exactly."
+            }
+        };
+        tools.push(json!({"name":name,"description":format!("{description} Newlines in replacement create real paragraphs, including empty ones. At most 64 KiB and 1024 paragraphs. This queues a preview only; the user must approve in WordCraft. Never claim it is applied or saved. One proposal per turn."),
+            "inputSchema":{"type":"object","properties":properties,"required":required,"additionalProperties":false},
+            "annotations":{"readOnlyHint":false,"destructiveHint":false,"openWorldHint":false}}));
+    }
     Value::Array(tools)
 }
 
@@ -217,6 +303,60 @@ mod tests {
         let mut profile = CodexProfile::default();
         profile.share(context);
         (session, profile, args)
+    }
+    #[test]
+    fn insertion_uses_captured_caret_without_sharing_surrounding_text() {
+        let mut session = Session::new(wordcraft_doc::Document::from_text("PRIVATE"));
+        session.sel = Selection::caret(Pos::body(0, 3));
+        let context = SharedContext::capture(&session, Scope::Caret, true).unwrap();
+        let mut args = context.metadata();
+        let mut profile = CodexProfile::default();
+        profile.share(context);
+        assert!(!profile.call(&session, "read_context", &args).to_value().to_string().contains("PRIVATE"));
+        session.sel = Selection::caret(Pos::body(0, 7));
+        args["replacement"] = json!("First\nSecond");
+        let before = session.doc.clone();
+        assert!(!profile.propose_tool(&mut session, "thread", "insert", INSERTION_TOOL, &args).is_error);
+        assert_eq!(session.doc, before);
+        session.approve_codex("insert").unwrap();
+        assert_eq!(session.doc.final_text(StoryRef::Body), "PRIFirst\nSecondVATE");
+        assert!(profile.propose_tool(&mut session, "thread", "stale", INSERTION_TOOL, &args).is_error);
+        profile.revoke();
+        assert!(profile.propose_tool(&mut session, "thread", "revoked", INSERTION_TOOL, &args).is_error);
+    }
+    #[test]
+    fn paragraph_proposals_require_document_consent_and_exact_bounded_original() {
+        let (mut session, mut profile, mut args) = shared();
+        args["startParagraph"] = json!(0);
+        args["endParagraph"] = json!(1);
+        args["original"] = json!("PUBLIC\nPRIVATE OUTSIDE SELECTION");
+        args["replacement"] = json!("First revised\nSecond revised\nThird");
+        assert!(profile.propose_tool(&mut session, "thread", "outside", PARAGRAPHS_TOOL, &args).is_error);
+        let context = SharedContext::capture(&session, Scope::Document, true).unwrap();
+        profile.share(context);
+        let read = profile.call(&session, "read_context", &args).to_value().to_string();
+        assert!(read.contains("paragraphs") && read.contains("PRIVATE OUTSIDE SELECTION"));
+        let before = session.doc.clone();
+        let mut bad = args.clone();
+        bad["endParagraph"] = json!(u64::MAX);
+        assert!(profile.propose_tool(&mut session, "thread", "oversize", PARAGRAPHS_TOOL, &bad).is_error);
+        bad = args.clone();
+        bad["original"] = json!("wrong original");
+        assert!(profile.propose_tool(&mut session, "thread", "wrong", PARAGRAPHS_TOOL, &bad).is_error);
+        assert!(!profile.propose_tool(&mut session, "thread", "paragraphs", PARAGRAPHS_TOOL, &args).is_error);
+        assert_eq!(session.doc, before);
+        session.approve_codex("paragraphs").unwrap();
+        session.run("review.acceptCodex", &json!({"request":"paragraphs"})).unwrap();
+        assert_eq!(session.doc.final_text(StoryRef::Body), "First revised\nSecond revised\nThird");
+        assert!(profile.propose_tool(&mut session, "thread", "stale", PARAGRAPHS_TOOL, &args).is_error);
+    }
+    #[test]
+    fn assistant_advertises_insertion_and_paragraph_previews() {
+        let tools = assistant_tool_definitions();
+        let names = tools.as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect::<Vec<_>>();
+        assert!(names.contains(&"propose_insertion"));
+        assert!(names.contains(&"propose_paragraphs"));
+        assert!(!names.contains(&"execute") && !names.contains(&"approve") && !names.contains(&"save_document"));
     }
     #[test]
     fn consent_scope_and_original_selection_are_enforced() {

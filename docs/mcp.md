@@ -20,7 +20,10 @@ loopback addresses; see [Keys](control-protocol.md#keys).
 The [Assistant pane](assistant.md) starts its own Codex app-server and private
 WordCraft helper. It needs no `claude mcp add` or global MCP configuration. Its
 separate profile exposes only `context_status`, `read_context`, `read_selection`,
-`find_text`, `inspect_formatting` and preview-only `propose_selection`. The host
+`find_text`, `inspect_formatting` and preview-only `propose_selection`,
+`propose_insertion`, `propose_paragraphs`. The three proposal tools support real
+paragraph breaks, captured insertion locations and bounded consecutive paragraph
+replacements. They never apply edits themselves. The host
 checks explicit sharing, document revision and conversation scope. Document writes
 wait for a person's approval in WordCraft; save/export and general `execute`,
 filesystem, shell, UI-control and screenshot tools are unavailable to Codex.

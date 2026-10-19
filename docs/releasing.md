@@ -70,8 +70,15 @@ T11 adds executed code-mode catalogue qualification: current signed-in models
 require the isolated host. Download its same-target `codex-code-mode-host` archive
 from the same release and preserve the required sibling filename. The host is an
 external Codex dependency, not a new WordCraft helper asset. General `functions`
-and `clock` namespaces are excluded; only the six document MCP tools are callable
+and `clock` namespaces are excluded; T11 qualified six document MCP tools callable
 inside it. The expanded six-platform qualification passed in
 [run 39312512365](https://github.com/Leonb830/wordcraft/actions/runs/39312512365)
 at implementation commit `a8413e9`; see the checklist for each native job and
 the separate signed-in, local end-to-end checks.
+
+T12 expands that catalogue to eight tools: five reads and three proposals,
+including `propose_insertion` and `propose_paragraphs`. Runtime qualification now
+also sends both new tools through the actual private stdio relay and checks that
+they leave the document unchanged until explicit approval. The executed-catalogue
+test expects all eight tools and still denies an unadvertised general writer.
+The T12 checklist records the follow-up native matrix and hosted paragraph checks.

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use wordcraft_assistant::native::{DocumentBridge, Launch, Runtime};
 use wordcraft_assistant::{Event, Notice, Request};
-use wordcraft_mcp::codex_profile::{CodexProfile, PROPOSAL_TOOL, Scope, SharedContext};
+use wordcraft_mcp::codex_profile::{CodexProfile, PROPOSAL_TOOLS, Scope, SharedContext};
 use wordcraft_mcp::tools::ToolResult;
 use wordcraft_ui_egui::{WordApp, assistant::Action};
 
@@ -271,6 +271,7 @@ impl Host {
                 Action::Retry => self.submit(app, app.assistant.last_prompt.clone()),
                 Action::Stop => self.stop(app),
                 Action::Account => self.send(Request::Account),
+                Action::ShareCaret => self.share(app, Scope::Caret),
                 Action::ShareSelection => self.share(app, Scope::Selection),
                 Action::ShareDocument => self.share(app, Scope::Document),
                 Action::Revoke => {
@@ -432,10 +433,10 @@ impl Host {
             }
             Event::DocumentRequest { id, thread, turn, tool, arguments } => {
                 let result = if self.thread.as_deref() == Some(thread.as_str()) && !self.stop_requested && (turn.is_none() || turn == self.turn) {
-                    if tool == PROPOSAL_TOOL {
+                    if PROPOSAL_TOOLS.contains(&tool.as_str()) {
                         if !self.stop_requested && turn.is_some() && turn == self.turn {
                             let request = format!("{thread}:{}", turn.as_deref().unwrap_or(""));
-                            let result = self.profile.propose(&mut app.session, &thread, &request, &arguments);
+                            let result = self.profile.propose_tool(&mut app.session, &thread, &request, &tool, &arguments);
                             if !result.is_error {
                                 app.assistant.activity = "A proposed edit is waiting for your approval.".into();
                             }
@@ -563,6 +564,7 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::time::Instant;
+    use wordcraft_mcp::codex_profile::PROPOSAL_TOOL;
     fn until(host: &mut Host, app: &mut WordApp, predicate: impl Fn(&WordApp) -> bool) {
         let ctx = egui::Context::default();
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -692,6 +694,32 @@ mod tests {
         app.execute("ui.assistantApprove", json!({"request":"thread:turn"})).unwrap();
         assert_eq!(app.session.doc.final_text(wordcraft_doc::StoryRef::Body), "Revised text\nHuman paragraph");
         assert!(!app.autosave && !app.session.autosave);
+    }
+    #[test]
+    fn codex_new_writing_tools_only_queue_until_explicit_approval() {
+        use wordcraft_mcp::codex_profile::{INSERTION_TOOL, PARAGRAPHS_TOOL};
+        for tool in [INSERTION_TOOL, PARAGRAPHS_TOOL] {
+            let (mut host, mut app) = stream_host();
+            app.session.set_document(wordcraft_doc::Document::new());
+            host.share(&app, if tool == INSERTION_TOOL { Scope::Caret } else { Scope::Document }).unwrap();
+            let mut args = host.profile.context().unwrap().metadata();
+            args["replacement"] = json!("First draft paragraph.\nSecond draft paragraph.");
+            args["startParagraph"] = json!(0);
+            args["endParagraph"] = json!(0);
+            args["original"] = json!("");
+            host.event(
+                &mut app,
+                Event::DocumentRequest { id: json!(3), thread: "thread".into(), turn: Some("turn".into()), tool: tool.into(), arguments: args },
+            );
+            assert_eq!(app.session.doc.final_text(wordcraft_doc::StoryRef::Body), "");
+            assert_eq!(app.session.codex_requests()[0]["state"], "pending");
+            app.autosave = true;
+            app.session.autosave = true;
+            app.execute("ui.assistantApprove", json!({"request":"thread:turn"})).unwrap();
+            assert_eq!(app.session.doc.body.len(), 2);
+            assert_eq!(app.session.doc.final_text(wordcraft_doc::StoryRef::Body), "First draft paragraph.\nSecond draft paragraph.");
+            assert!(!app.autosave && !app.session.autosave);
+        }
     }
     #[test]
     fn codex_missing_dispatch_host_is_actionable_and_redacted() {

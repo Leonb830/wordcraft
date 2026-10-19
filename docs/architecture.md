@@ -1,6 +1,6 @@
 # WordCraft architecture
 
-> **Last reviewed:** 2026-10-19 · **Last updated:** 2026-10-19 · **Change:** minor (fork Codex architecture); previous: minor (`proof` is per language: English and Polish; previously major: first committed version; `plan/architecture.md` is local-only) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-19 · **Last updated:** 2026-10-19 · **Change:** minor (T12 structural proposal review); previous: minor (`proof` is per language: English and Polish; previously major: first committed version; `plan/architecture.md` is local-only) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 Fork update (2026-10-19): native Codex assistant on `codex/wordcraft-vnext`,
 based on upstream `eae2421`. Original architecture measurements below date from
@@ -60,7 +60,7 @@ L6 exposes typed UI actions and displays streamed state without process I/O.
 Authentication uses the runtime's ChatGPT browser flow in the separate profile.
 No global Codex config is changed and protocol payloads are not diagnostic logs.
 
-The helper entry point `wordcraft --codex-document-bridge` exposes six closed
+The helper entry point `wordcraft --codex-document-bridge` exposes eight closed
 MCP tools. Standard MCP form elicitation carries calls back through stable
 app-server events to the native host, which checks thread/turn ownership.
 `mcp::codex_profile` independently enforces explicit captured context,
@@ -68,7 +68,13 @@ document identity/revision, text limits and tool names. The original MCP Backend
 and external CLI/control routes remain separate. Codex gets no control socket,
 filesystem/shell/UI/screenshot/save/export or arbitrary command tools.
 
-`propose_selection` queues one plain paragraph-selection preview per turn.
+`propose_selection`, `propose_insertion` and `propose_paragraphs` queue one bounded
+plain-text preview per turn. Captured insertion-point consent shares no surrounding
+text; document consent exposes indices for consecutive body paragraph proposals.
+The engine prepares replacement text and tracked paragraph marks on a cloned
+document before committing one undo checkpoint. Scoped review resolves only the
+request's revision IDs and paragraph marks; accepted undo compares and replaces
+only the affected paragraph range, preserving later edits elsewhere.
 Only the person's `ui.assistantApprove` action mutates the engine. It revalidates
 revision/scope, pauses AutoSave and creates Codex-authored insertion/deletion
 revisions plus request/thread metadata. Scoped accept/reject/undo operates on
@@ -98,6 +104,7 @@ See [ADR 0001](decisions/0001-codex-app-server.md), [user guide](assistant.md) a
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-19 | minor | T12: captured insertion and multi-paragraph proposals, tracked paragraph structure and bounded scoped undo |
 | 2026-10-19 | minor | Fork native Codex service, closed relay, request approval/review, private settings and WASM boundary |
 | 2026-10-10 | minor | `proof`: proofing languages (English, Polish), affix engine, Polish patterns; layout and engine route each run by its language |
 | 2026-10-10 | major | First committed architecture doc, from the crates' sources and `AGENTS.md` |

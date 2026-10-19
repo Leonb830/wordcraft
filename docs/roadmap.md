@@ -1,12 +1,18 @@
 # WordCraft roadmap: milestones and what's next
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (Czech proofing review fixes; previously minor: Portuguese proofing; previously minor: Polish interface and Polish proofing; previously trivial: M7: formatting revisions landed, #41; previously trivial: M5: Draw Table and Eraser landed, #303; previously minor: beta distance restated: ~15 points, ~150–230 h; previously: alpha gate checked: six core workflows pass; previously major: milestones moved here from ROADMAP.md; Current focus set from the re-measured gaps) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
+> **Last reviewed:** 2026-10-19 · **Last updated:** 2026-10-19 · **Change:** minor (T12 paragraph drafting; previously minor: Czech proofing review fixes; previously minor: Portuguese proofing; previously minor: Polish interface and Polish proofing; previously trivial: M7: formatting revisions landed, #41; previously trivial: M5: Draw Table and Eraser landed, #303; previously minor: beta distance restated: ~15 points, ~150–230 h; previously: alpha gate checked: six core workflows pass; previously major: milestones moved here from ROADMAP.md; Current focus set from the re-measured gaps) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 Forward-looking plan. The summary is [`ROADMAP.md`](../ROADMAP.md); the ranked work list is
 [`gaps.md`](gaps.md); the numbers are in [`target-app-parity.md`](target-app-parity.md). Hours are
 Opus 5.5 agent wall-clock.
 
 ## Current focus (toward beta, ~150–230 h)
+
+Fork follow-up (2026-10-19): the native Codex assistant now supports approved
+blank-page drafts and consecutive paragraph edits with tracked paragraph breaks.
+Object/formatting edits and restoring request cards after restart remain future
+work; see [gap 25](gaps.md) and [T12 evidence](tasks/todo.md). The upstream beta
+priorities and estimates below are unchanged.
 
 1. **Merge or close the ~45 open PRs** before starting overlapping work: many close catalog gaps
    (Clipboard pane #264, Manage Styles #270, Group #267), fix field bugs (Hebrew RTL #20, IME
@@ -68,12 +74,13 @@ partial rows are fidelity gaps (beta work), not broken workflows. WordCraft stay
 ## Next after beta
 
 Charts and SmartArt editing, the Draw tab, `.doc` writing, PDF Reflow, the remaining interface
-languages, screen-reader access, ecosystem decisions (VBA, add-ins, cloud), an in-app assistant.
+languages, screen-reader access, ecosystem decisions (VBA, add-ins, cloud), deeper in-app assistant editing.
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-19 | minor | Fork T12: approved paragraph drafting and remaining assistant depth; upstream beta estimates unchanged |
 | 2026-10-12 | minor | Czech proofing review: short-word splits rank after deletion, NOSUGGEST excludes suggestions while accepting typed forms, affix comments apply only to headers, ratios keep spaces and repeated-word messages use Czech quotes; synthetic engine end-to-end and latency checks |
 | 2026-10-12 | minor | Czech spelling from the installed Hunspell dictionary, runtime-table suggestions and generic checks; Czech interface writes cs-CZ documents; no Czech hyphenation patterns bundled; estimates unchanged |
 | 2026-10-12 | minor | M15: Portuguese proofing (pt-BR spelling from the installed VERO dictionary, suggestions, grammar, hyphenation; Review › Language gains Português (Brasil)) |

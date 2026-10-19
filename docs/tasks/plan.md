@@ -322,3 +322,21 @@ review commands. Add those catalogue entries without relaxing the i18n gates.
 Full CI on a German macOS environment exposed the existing Breaks-menu tests
 assuming English while inheriting the system locale. Set the fixture language
 explicitly before rendering; preserve the production locale behavior and assertions.
+
+## T12 — approved follow-up: blank-page and multi-paragraph writing
+
+User requested insertion on a blank page and drafting/editing multiple paragraphs
+while preserving approval, Codex attribution and undo. Extend the existing engine
+proposal boundary to bounded contiguous plain-text paragraphs and tracked paragraph
+marks. Add captured insertion-point consent, `propose_insertion`, and
+`propose_paragraphs` for explicit document-sharing ranges; retain `propose_selection`
+for selected ranges. Every tool only queues a preview; approval revalidates the
+document/revision. Scoped accept/reject/undo must include paragraph boundaries and
+preserve unrelated human changes; refuse overlaps, objects, controls and protection.
+No general command, filesystem, save, shell or UI tool is added.
+
+Use the already approved engine/MCP/UI/native verification seams: red/green blank
+draft then multi-paragraph replacement, scoped review and later human changes,
+consent/stale/forbidden tools, DOCX round-trip, UI preview and hosted native turns.
+Update guides/ADR/parity/gap/checklist, run full CI and WASM, qualify the expanded
+actual-runtime catalogue, and push to the same fork branch.

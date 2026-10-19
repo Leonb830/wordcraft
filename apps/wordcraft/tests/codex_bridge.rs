@@ -6,7 +6,7 @@ use wordcraft_assistant::{
     native::{DocumentBridge, Launch, Runtime},
 };
 use wordcraft_engine::Session;
-use wordcraft_mcp::codex_profile::{CodexProfile, PROPOSAL_TOOL, Scope, SharedContext};
+use wordcraft_mcp::codex_profile::{CodexProfile, INSERTION_TOOL, PARAGRAPHS_TOOL, PROPOSAL_TOOL, Scope, SharedContext};
 fn next(runtime: &mut Runtime) -> Event {
     let deadline = Instant::now() + Duration::from_secs(40);
     loop {
@@ -84,6 +84,36 @@ fn installed_runtime_document_relay_uses_only_private_stdio() {
     }
     assert_eq!(session.doc.final_text(wordcraft_doc::StoryRef::Body), "Shared text\nPrivate text");
     assert_eq!(session.codex_requests()[0]["state"], "pending");
+    for tool in [INSERTION_TOOL, PARAGRAPHS_TOOL] {
+        let mut session = Session::new(wordcraft_doc::Document::from_text(""));
+        let context = SharedContext::capture(&session, Scope::Document, true).unwrap();
+        let metadata = context.metadata();
+        let mut profile = CodexProfile::default();
+        profile.share(context);
+        let arguments = json!({"documentId":metadata["documentId"],"revision":metadata["revision"],
+            "startParagraph":0,"endParagraph":0,"original":"","replacement":"First paragraph.\nSecond paragraph."});
+        runtime.send(Request::ProbeDocument { thread_id: thread.clone(), tool: tool.into(), arguments }).unwrap();
+        loop {
+            match next(&mut runtime) {
+                Event::DocumentRequest { id, thread: requested, tool: requested_tool, arguments, .. } => {
+                    assert_eq!(requested, thread);
+                    assert_eq!(requested_tool, tool);
+                    let result = profile.propose_tool(&mut session, &thread, "draft-probe", &requested_tool, &arguments);
+                    runtime.document_reply(id, result.to_value()).unwrap();
+                }
+                Event::Response { request: Request::ProbeDocument { .. }, result, .. } => {
+                    assert!(result.to_string().contains("awaiting_user_approval"));
+                    break;
+                }
+                Event::Error(e) => panic!("{e}"),
+                _ => {}
+            }
+        }
+        assert_eq!(session.doc.final_text(wordcraft_doc::StoryRef::Body), "");
+        session.approve_codex("draft-probe").unwrap();
+        assert_eq!(session.doc.final_text(wordcraft_doc::StoryRef::Body), "First paragraph.\nSecond paragraph.");
+        assert_eq!(session.doc.body.len(), 2);
+    }
     drop(runtime);
     // The temporary profile remains separate; no global settings or credential copying.
     let config = std::fs::read_to_string(temp.path().join("home/config.toml")).unwrap();
@@ -218,6 +248,8 @@ fn installed_runtime_advertises_only_qualified_document_tools() {
             "mcp__wordcraft__context_status",
             "mcp__wordcraft__find_text",
             "mcp__wordcraft__inspect_formatting",
+            "mcp__wordcraft__propose_insertion",
+            "mcp__wordcraft__propose_paragraphs",
             "mcp__wordcraft__propose_selection",
             "mcp__wordcraft__read_context",
             "mcp__wordcraft__read_selection"

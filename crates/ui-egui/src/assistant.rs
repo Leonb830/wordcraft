@@ -13,6 +13,7 @@ pub enum Action {
     Connect,
     Disconnect,
     Account,
+    ShareCaret,
     ShareSelection,
     ShareDocument,
     Revoke,
@@ -238,6 +239,7 @@ pub fn pane(app: &mut WordApp, ui: &mut egui::Ui) {
         ui.add_enabled_ui(app.assistant.thread.is_some() && !app.assistant.pending, |ui| {
             ui.horizontal_wrapped(|ui| {
                 for (label, command) in [
+                    ("Share insertion point", "ui.assistantShareCaret"),
                     ("Share selection", "ui.assistantShareSelection"),
                     ("Share document", "ui.assistantShareDocument"),
                     ("Stop sharing", "ui.assistantRevoke"),
@@ -354,7 +356,7 @@ pub fn show_review(app: &mut WordApp, ui: &mut egui::Ui) {
             let _ = app.run("ui.assistantReview", json!({"open":false}));
             return;
         }
-        review_cards(app, ui);
+        egui::ScrollArea::vertical().id_salt("codex_review_scroll").show(ui, |ui| review_cards(app, ui));
     });
 }
 
@@ -375,7 +377,10 @@ pub fn review_cards(app: &mut WordApp, ui: &mut egui::Ui) {
             ui.group(|ui| {
                 ui.add(egui::Label::new(format!("Codex · {id} · {state}")).wrap());
                 ui.label(format!("Document revision {}", request["revision"]));
-                ui.label("Original text");
+                if let Some(paragraph) = request["paragraph"].as_u64() {
+                    ui.label(format!("Starting at paragraph {paragraph}"));
+                }
+                ui.label(if request["before"].as_str().unwrap_or("").is_empty() { "Insert at captured location" } else { "Original text" });
                 ui.add(egui::Label::new(request["before"].as_str().unwrap_or("")).wrap());
                 ui.label("Proposed text");
                 ui.add(egui::Label::new(request["replacement"].as_str().unwrap_or("")).wrap());
@@ -423,6 +428,28 @@ mod tests {
         WordApp::new(session, crate::Services::default())
     }
     #[test]
+    fn codex_blank_draft_card_applies_paragraphs_only_after_click_and_undo_restores_blank() {
+        let mut s = Session::new(Document::new());
+        s.propose_codex("thread", "draft", s.document_id(), s.rev(), s.sel.clone(), "First paragraph.\n\nLast paragraph.").unwrap();
+        let mut app = WordApp::new(s, Default::default());
+        app.autosave = true;
+        app.session.autosave = true;
+        let mut h = Harness::builder().with_size(egui::vec2(500.0, 700.0)).build_ui_state(|ui, app: &mut WordApp| review_cards(app, ui), app);
+        h.get_by_label("Insert at captured location");
+        h.get_by_label("Starting at paragraph 1");
+        assert_eq!(h.state().session.doc.final_text(StoryRef::Body), "");
+        h.get_by_label("Approve edit").click();
+        h.run();
+        assert_eq!(h.state().session.doc.body.len(), 3);
+        assert!(!h.state().autosave && !h.state().session.autosave);
+        h.get_by_label("Accept request").click();
+        h.run();
+        h.get_by_label("Undo request").click();
+        h.run();
+        assert_eq!(h.state().session.doc.body.len(), 1);
+        assert_eq!(h.state().session.doc.final_text(StoryRef::Body), "");
+    }
+    #[test]
     fn codex_cards_approve_accept_and_undo() {
         let mut h = Harness::builder().with_size(egui::vec2(500.0, 700.0)).build_ui_state(|ui, app: &mut WordApp| review_cards(app, ui), app());
         assert_eq!(h.state().session.doc.final_text(StoryRef::Body), "Original sentence");
@@ -461,7 +488,13 @@ mod tests {
     #[test]
     fn codex_cards_snapshot() {
         let Ok(path) = std::env::var("WORDCRAFT_CODEX_REVIEW_SHOT") else { return };
-        let mut state = app();
+        let mut state = conversation_app();
+        state.session.set_document(Document::new());
+        state.session.propose_codex(
+            "synthetic-thread", "draft-preview", state.session.document_id(), state.session.rev(), state.session.sel.clone(),
+            "Our community garden gives neighbors a place to grow fresh food together.\nVolunteers share tools, plant seasonal crops, and learn from one another.\nJoin us on Saturday to help prepare the next planting beds."
+        ).unwrap();
+        state.assistant.sharing = "Sharing insertion point · 0 bytes".into();
         state.assistant.review_open = true;
         let mut h = Harness::builder().with_size(egui::vec2(1200.0, 850.0)).wgpu().build_ui_state(
             |ui, app: &mut WordApp| {
@@ -528,9 +561,12 @@ mod tests {
     #[test]
     fn codex_pane_composer_context_and_pending_gate() {
         let mut h = pane_harness(conversation_app(), 360.0);
-        for (label, action) in
-            [("Share selection", Action::ShareSelection), ("Share document", Action::ShareDocument), ("Stop sharing", Action::Revoke)]
-        {
+        for (label, action) in [
+            ("Share insertion point", Action::ShareCaret),
+            ("Share selection", Action::ShareSelection),
+            ("Share document", Action::ShareDocument),
+            ("Stop sharing", Action::Revoke),
+        ] {
             h.get_by_label(label).click();
             h.run_steps(3);
             assert_eq!(h.state_mut().assistant.actions.pop_front(), Some(action));

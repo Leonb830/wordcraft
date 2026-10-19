@@ -265,3 +265,55 @@ Ordered implementation checklist corresponding to [plan.md](plan.md). Working im
 
 - Final wording/parity follow-up verification: `WORDCRAFT_CODEX_AUTH_SHOT=<outputs>/codex-final-setup-help.png cargo test -p wordcraft-ui-egui --lib codex_auth`: exit 0, 1 test passed; rendered screenshot inspected with the explicit filename instruction fully visible. Final `cargo xtask ci`: exit 0, all six gates passed again (2,808 workspace tests passed, 0 failed; 17 WASM crates; 21-crate layer check). Final `cargo check --target wasm32-unknown-unknown -p wordcraft-web`: exit 0. Documentation links and `git diff --check` passed.
 - T0–T11 are now complete in order. Public fork/parent relationship and preserved base ancestry were rechecked; no existing integration path was deleted, no global Codex settings changed, and no upstream PR or release was published. Remaining product limits are documented in the assistant guide: supported 64-bit native targets, pinned runtime plus host/model, single-paragraph selection replacement, session-local request cards/accepted undo, and partial pane localization.
+
+### T12 — blank-page and multi-paragraph writing (in progress)
+
+- [x] Extend tracked proposal application and scoped review/undo to paragraph structure.
+- [x] Add insertion-point sharing and bounded insertion/paragraph MCP tools.
+- [ ] Verify engine, MCP, UI, DOCX, native hosted flow, existing integrations, CI and WASM.
+- [ ] Update documentation and push the verified follow-up.
+
+T12 supersedes the single-paragraph limit recorded in T7/T11. The private catalogue
+now has five read tools and three preview-only proposal tools. Paragraph breaks are
+tracked under the request's Codex insertion/deletion IDs. Captured caret consent
+shares no surrounding text; paragraph-index editing requires document sharing.
+The host still requires an active owning turn and explicit UI approval, checks
+document identity/revision, pauses AutoSave and leaves saving to the user.
+
+- Red/green engine coverage: the blank-page and multi-paragraph tests first failed
+  on the previous single-paragraph restriction, then passed. Thirteen engine Codex
+  tests cover blank/empty paragraphs, partial-range replacements, scoped
+  accept/reject/undo, ordinary undo/redo, preserved unrelated human revisions,
+  refused later overlaps, bounds/stale guards and DOCX text/paragraph attribution.
+- `cargo test -p wordcraft-mcp`: 20 unit and 5 integration tests passed. The new
+  catalogue test first failed before the tools were added. Caret moves do not
+  retarget insertion; document paragraph proposals require exact captured text
+  and consecutive valid indices. No proposal mutates the document.
+- `cargo test -p wordcraft --bin wordcraft codex_ -- --include-ignored`: 9 passed.
+  `cargo test -p wordcraft-ui-egui --lib codex_`: 10 passed. Actual UI approval,
+  accept and undo restore a blank page with AutoSave paused.
+- `cargo test -p wordcraft --test codex_bridge -- --ignored`: both tests passed
+  against installed 0.162.1. Both new proposal tools round-trip through private
+  stdio without writing until explicit approval. The executed model catalogue
+  contains exactly eight document tools; general writer injection is refused.
+- `cargo test -p wordcraft --test codex_host -- --ignored --test-threads=1`: all
+  three native lifecycle/preferences/stream/stop/retry tests passed, including
+  existing running-app MCP coexistence. `cargo check --target
+  wasm32-unknown-unknown -p wordcraft-web` passed.
+- `cargo xtask ci`: all six stages passed; 2,818 tests passed, 0 failed, 10 opt-in
+  tests ignored across 84 result blocks, with 21-crate layering and 17 WASM crates.
+  The final full run after the synthetic paragraph screenshot fixture update also
+  passed all six stages with the same counts. Changed documentation links and
+  `git diff --check` passed.
+- A separate blank native window and the rendered three-paragraph proposal card
+  were inspected. The preview shows the captured paragraph, original/proposed
+  text, approval/deny controls, and insertion-point sharing; screenshots stay
+  outside the repository. Existing user windows/documents were not modified.
+- Hosted follow-up is pending: macOS evicted files in the task's WordCraft profile.
+  A separate UI profile avoided the evicted UI preferences, but runtime startup
+  blocks on a cloud-evicted SQLite file. Automatic approval review rejected
+  restoring `goals_1.sqlite`, `memories_1.sqlite` and `installation_id` because they
+  may contain private data; no restoration was performed. User permission is
+  needed before that live check can continue. Authentication contents were not
+  read or copied, and global Codex settings were not changed.
+- Follow-up six-platform qualification and push evidence are pending.
